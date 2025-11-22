@@ -20,7 +20,7 @@ const LighthouseWidget = () => {
         setIsLoading(true);
         const websiteUrl = encodeURIComponent("https://demo.lovable.dev");
         // Use environment variable for API key
-        const apiKey = import.meta.env.VITE_PAGESPEED_API_KEY;
+        const apiKey = import.meta.env.VITE_PAGEVITALS_API_KEY;
         const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${websiteUrl}&strategy=mobile${apiKey ? `&key=${apiKey}` : ""}`;
 
         const response = await fetch(apiUrl);

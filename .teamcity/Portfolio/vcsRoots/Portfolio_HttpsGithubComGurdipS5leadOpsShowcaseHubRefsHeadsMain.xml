@@ -3,15 +3,15 @@
   <name>https://github.com/GurdipS5/lead-ops-showcase-hub#refs/heads/main</name>
   <param name="agentCleanFilesPolicy" value="ALL_UNTRACKED" />
   <param name="agentCleanPolicy" value="NEVER" />
-  <param name="authMethod" value="PASSWORD" />
+  <param name="authMethod" value="ACCESS_TOKEN" />
   <param name="branch" value="refs/heads/main" />
   <param name="ignoreKnownHosts" value="true" />
-  <param name="secure:password" value="zxxb204d927baef5d1299d19c42c589dde2f11df7974412aabef079dd0ae03ee3f5d5452b4314b3761b775d03cbe80d301b" />
   <param name="submoduleCheckout" value="CHECKOUT" />
   <param name="teamcity:branchSpec" value="refs/heads/*" />
-  <param name="url" value="https://github.com/GurdipS5/lead-ops-showcase-hub" />
+  <param name="tokenId" value="tc_token_id:CID_1cdf9f800d9426cda64cdf247762a135:-1:293cdb5f-b817-4036-b7f9-a008648697e4" />
+  <param name="url" value="https://github.com/GurdipSCode/devops-gurdip-portfolio" />
   <param name="useAlternates" value="SHALLOW_CLONE" />
-  <param name="username" value="GurdipS5" />
+  <param name="username" value="oauth2" />
   <param name="usernameStyle" value="USERID" />
 </vcs-root>
 

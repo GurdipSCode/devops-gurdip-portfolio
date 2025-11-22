@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build-type xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" uuid="10d32fae-1802-4bd4-83f1-d8e593924d06" paused="true" xsi:noNamespaceSchemaLocation="https://www.jetbrains.com/teamcity/schemas/2025.3/project-config.xsd">
+  <name>SemgrepSCAScan</name>
+  <description />
+  <settings>
+    <build-runners>
+      <runner id="Execute_Semgrep" name="Execute Semgrep" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Semgrep CI Scan Script
+# Executes Semgrep scan and saves SARIF results to /artifacts/semgrep
+
+# Set variables
+$artifactsPath = "/artifacts/semgrep"
+$sarifOutputFile = "$artifactsPath/semgrep-results.sarif"
+
+# Create the semgrep directory only if it doesn't exist
+if (-not (Test-Path -Path $artifactsPath)) {
+    Write-Host "Creating output directory: $artifactsPath" -ForegroundColor Cyan
+    New-Item -ItemType Directory -Path $artifactsPath | Out-Null
+} else {
+    Write-Host "Output directory already exists: $artifactsPath" -ForegroundColor Gray
+}
+
+# Run Semgrep CI scan with SARIF output
+Write-Host "Running Semgrep CI scan..." -ForegroundColor Cyan
+try {
+    semgrep ci --sarif --output $sarifOutputFile
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Semgrep scan completed successfully!" -ForegroundColor Green
+        Write-Host "Results saved to: $sarifOutputFile" -ForegroundColor Green
+    } else {
+        Write-Host "⚠ Semgrep scan completed with findings (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+        Write-Host "Results saved to: $sarifOutputFile" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "✗ Error running Semgrep scan: $_" -ForegroundColor Red
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+    </build-runners>
+    <vcs-settings>
+      <vcs-entry-ref root-id="Portfolio_HttpsGithubComGurdipSCodeDevopsGurdipPortfolioRefsHeadsMain" />
+    </vcs-settings>
+    <build-triggers>
+      <build-trigger id="TRIGGER_6" type="schedulingTrigger">
+        <parameters>
+          <param name="branchFilter" value="+:*" />
+          <param name="cronExpression_dm" value="*" />
+          <param name="cronExpression_dw" value="?" />
+          <param name="cronExpression_hour" value="*" />
+          <param name="cronExpression_min" value="0" />
+          <param name="cronExpression_month" value="*" />
+          <param name="cronExpression_sec" value="0" />
+          <param name="cronExpression_year" value="*" />
+          <param name="dayOfWeek" value="Sunday" />
+          <param name="enableQueueOptimization" value="true" />
+          <param name="hour" value="12" />
+          <param name="minute" value="0" />
+          <param name="promoteWatchedBuild" value="true" />
+          <param name="revisionRule" value="lastFinished" />
+          <param name="revisionRuleBuildBranch" value="+:&lt;default&gt;" />
+          <param name="schedulingPolicy" value="daily" />
+          <param name="timezone" value="SERVER" />
+        </parameters>
+      </build-trigger>
+    </build-triggers>
+    <build-extensions>
+      <extension id="perfmon" type="perfmon">
+        <parameters>
+          <param name="teamcity.perfmon.feature.enabled" value="true" />
+        </parameters>
+      </extension>
+    </build-extensions>
+  </settings>
+</build-type>
+
