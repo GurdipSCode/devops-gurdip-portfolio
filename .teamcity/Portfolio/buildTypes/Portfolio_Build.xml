@@ -352,7 +352,7 @@ if ($LASTEXITCODE -eq 0) {
       </runner>
       <runner id="Run_Sonar_Scan" name="Run Sonar Scan" type="simpleRunner">
         <parameters>
-          <param name="script.content" value="node sonar.js" />
+          <param name="script.content" value="node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan" />
           <param name="teamcity.step.mode" value="execute_if_failed" />
           <param name="use.custom.script" value="true" />
         </parameters>
