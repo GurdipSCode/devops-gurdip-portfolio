@@ -1,0 +1,11 @@
+# Canonical identity
+Gurdip Sira <gurdip@gurdipsira.dev>
+
+# Variations to map → canonical
+Gurdip Sira <gurdip@gurdipsira.dev> <gurdip@TeamCity>
+Gurdip Sira <gurdip@gurdipsira.dev> <87333788+GurdipS5@users.noreply.github.com>
+Gurdip Sira <gurdip@gurdipsira.dev> <Administrator@GLOVSDEV25.GLOBAL.GSSIRA.COM>
+
+# Bots (kept explicit for clarity)
+renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>
+snyk-bot <snyk-bot@snyk.io>
