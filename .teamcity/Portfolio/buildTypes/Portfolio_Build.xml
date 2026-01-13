@@ -451,13 +451,6 @@ catch {
           <param name="teamcity.step.mode" value="execute_if_failed" />
         </parameters>
       </runner>
-      <runner id="Execute_Snyk" name="Authenticate Snyk" type="simpleRunner">
-        <parameters>
-          <param name="script.content" value="snyk auth %env.SNYK_TOKEN%" />
-          <param name="teamcity.step.mode" value="execute_if_failed" />
-          <param name="use.custom.script" value="true" />
-        </parameters>
-      </runner>
       <runner id="Execute_GitGuardian" name="Execute GitGuardian" type="jetbrains_powershell">
         <parameters>
           <param name="jetbrains_powershell_execution" value="PS1" />
