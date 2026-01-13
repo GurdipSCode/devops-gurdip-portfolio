@@ -458,13 +458,6 @@ catch {
           <param name="use.custom.script" value="true" />
         </parameters>
       </runner>
-      <runner id="Snyk_Code_Test" name="Snyk Code Test" type="simpleRunner">
-        <parameters>
-          <param name="script.content" value="snyk code test --json-file-output=%system.teamcity.build.checkoutDir%/artifacts/snyk/snyk-results.sarif --sarif" />
-          <param name="teamcity.step.mode" value="execute_if_failed" />
-          <param name="use.custom.script" value="true" />
-        </parameters>
-      </runner>
       <runner id="Execute_GitGuardian" name="Execute GitGuardian" type="jetbrains_powershell">
         <parameters>
           <param name="jetbrains_powershell_execution" value="PS1" />
