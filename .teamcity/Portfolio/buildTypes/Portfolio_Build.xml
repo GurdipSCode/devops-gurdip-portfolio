@@ -143,6 +143,39 @@ return $result]]></param>
           <param name="use.custom.script" value="true" />
         </parameters>
       </runner>
+      <runner id="Compute_Version" name="Compute Version" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Always ensure tags are present locally
+git fetch --tags --force | Out-Host
+
+# Next SemVer computed from commits since last tag (Conventional Commits)
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+
+if ([string]::IsNullOrWhiteSpace($next)) {
+  Write-Host "No version bump detected (no unreleased changes)."
+  exit 0
+}
+
+# TeamCity PR builds expose this parameter (if PR build feature is enabled)
+$prNumber = "%teamcity.pullRequest.number%"
+$isPR = $prNumber -and $prNumber -ne "%teamcity.pullRequest.number%"
+
+if ($isPR) {
+  # PR build: pre-release version, no git tag
+  $version = "$next-pr.$prNumber"
+} else {
+  # Main build: release-looking version (we'll actually tag in a later step)
+  $version = "v$next"
+}
+
+Write-Host "Computed version: $version"
+Write-Host "##teamcity[buildNumber '$version']"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
       <runner id="Set_Version" name="Set Version" type="simpleRunner">
         <parameters>
           <param name="script.content" value="git cliff --config cliff.toml --latest" />
@@ -1714,39 +1747,6 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ Release $BuildNumber created successfully!"]]></param>
           <param name="jetbrains_powershell_script_mode" value="CODE" />
           <param name="teamcity.step.mode" value="execute_if_failed" />
-        </parameters>
-      </runner>
-      <runner id="Compute_Version" name="Compute Version" type="jetbrains_powershell">
-        <parameters>
-          <param name="jetbrains_powershell_execution" value="PS1" />
-          <param name="jetbrains_powershell_noprofile" value="true" />
-          <param name="jetbrains_powershell_script_code"><![CDATA[# Always ensure tags are present locally
-git fetch --tags --force | Out-Host
-
-# Next SemVer computed from commits since last tag (Conventional Commits)
-$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
-
-if ([string]::IsNullOrWhiteSpace($next)) {
-  Write-Host "No version bump detected (no unreleased changes)."
-  exit 0
-}
-
-# TeamCity PR builds expose this parameter (if PR build feature is enabled)
-$prNumber = "%teamcity.pullRequest.number%"
-$isPR = $prNumber -and $prNumber -ne "%teamcity.pullRequest.number%"
-
-if ($isPR) {
-  # PR build: pre-release version, no git tag
-  $version = "$next-pr.$prNumber"
-} else {
-  # Main build: release-looking version (we'll actually tag in a later step)
-  $version = "v$next"
-}
-
-Write-Host "Computed version: $version"
-Write-Host "##teamcity[buildNumber '$version']"]]></param>
-          <param name="jetbrains_powershell_script_mode" value="CODE" />
-          <param name="teamcity.step.mode" value="default" />
         </parameters>
       </runner>
     </build-runners>
