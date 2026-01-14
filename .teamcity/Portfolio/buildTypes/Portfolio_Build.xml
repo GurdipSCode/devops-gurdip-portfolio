@@ -176,6 +176,22 @@ Write-Host "##teamcity[buildNumber '$version']"]]></param>
           <param name="teamcity.step.mode" value="default" />
         </parameters>
       </runner>
+      <runner id="Generate_Changelog" name="Generate Changelog" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
+
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
+
+# Create release notes using the version label we computed
+git cliff --config cliff.toml --unreleased --tag "v$next" -o CHANGELOG.md
+Write-Host "Generated CHANGELOG.md for v$next"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
       <runner id="Set_Version" name="Set Version" type="simpleRunner">
         <parameters>
           <param name="script.content" value="git cliff --config cliff.toml --latest" />
@@ -1747,22 +1763,6 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ Release $BuildNumber created successfully!"]]></param>
           <param name="jetbrains_powershell_script_mode" value="CODE" />
           <param name="teamcity.step.mode" value="execute_if_failed" />
-        </parameters>
-      </runner>
-      <runner id="Generate_Changelog" name="Generate Changelog" type="jetbrains_powershell">
-        <parameters>
-          <param name="jetbrains_powershell_execution" value="PS1" />
-          <param name="jetbrains_powershell_noprofile" value="true" />
-          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
-
-$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
-if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
-
-# Create release notes using the version label we computed
-git cliff --config cliff.toml --unreleased --tag "v$next" -o CHANGELOG.md
-Write-Host "Generated CHANGELOG.md for v$next"]]></param>
-          <param name="jetbrains_powershell_script_mode" value="CODE" />
-          <param name="teamcity.step.mode" value="default" />
         </parameters>
       </runner>
     </build-runners>
