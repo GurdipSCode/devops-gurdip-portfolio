@@ -192,6 +192,31 @@ Write-Host "Generated CHANGELOG.md for v$next"]]></param>
           <param name="teamcity.step.mode" value="default" />
         </parameters>
       </runner>
+      <runner id="Set_changelog" name="Tag Release" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
+
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
+
+$tag = "v$next"
+
+# Safety: don't re-tag if it already exists
+$existing = git tag -l $tag
+if ($existing) {
+  Write-Host "Tag $tag already exists. Skipping."
+  exit 0
+}
+
+git tag $tag
+git push origin $tag
+Write-Host "Created and pushed tag $tag"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
       <runner id="Set_Version" name="Set Version" type="simpleRunner">
         <parameters>
           <param name="script.content" value="git cliff --config cliff.toml --latest" />
@@ -285,31 +310,6 @@ if (-not $packageJsonUpdated -or -not $packageLockUpdated -or -not $distPackageJ
 
 Write-Host "All package files updated successfully!" -ForegroundColor Green
 exit 0]]></param>
-          <param name="jetbrains_powershell_script_mode" value="CODE" />
-          <param name="teamcity.step.mode" value="execute_if_failed" />
-        </parameters>
-      </runner>
-      <runner id="Set_changelog" name="Tag Release" type="jetbrains_powershell">
-        <parameters>
-          <param name="jetbrains_powershell_execution" value="PS1" />
-          <param name="jetbrains_powershell_noprofile" value="true" />
-          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
-
-$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
-if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
-
-$tag = "v$next"
-
-# Safety: don't re-tag if it already exists
-$existing = git tag -l $tag
-if ($existing) {
-  Write-Host "Tag $tag already exists. Skipping."
-  exit 0
-}
-
-git tag $tag
-git push origin $tag
-Write-Host "Created and pushed tag $tag"]]></param>
           <param name="jetbrains_powershell_script_mode" value="CODE" />
           <param name="teamcity.step.mode" value="execute_if_failed" />
         </parameters>
