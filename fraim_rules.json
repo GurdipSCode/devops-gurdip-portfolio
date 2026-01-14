@@ -1,0 +1,15 @@
+{
+  "Example Rule": "Flag this rule on every diff, it is an example to show how the workflow works.",
+  "XSS": "Flag any potential cross-site scripting vulnerabilities, including unescaped user input in HTML output.",
+  "SQL Injection": "Flag any potential SQL injection vulnerabilities, including string concatenation in SQL queries.",
+  "CSRF": "Flag any potential cross-site request forgery vulnerabilities, including missing CSRF tokens.",
+  "Path Traversal": "Flag any potential path traversal vulnerabilities, including unsanitized file paths from user input.",
+  "Command Injection": "Flag any potential command injection vulnerabilities, including unsanitized input in shell commands.",
+  "Hardcoded Secrets": "Flag any hardcoded passwords, API keys, tokens, or other secrets in the code.",
+  "Insecure Deserialization": "Flag any potential insecure deserialization vulnerabilities.",
+  "SSRF": "Flag any potential server-side request forgery vulnerabilities, including unvalidated URLs from user input.",
+  "Open Redirect": "Flag any potential open redirect vulnerabilities, including unvalidated redirect URLs.",
+  "Sensitive Data Exposure": "Flag any potential exposure of sensitive data in logs, error messages, or responses.",
+  "Authentication Bypass": "Flag any potential authentication bypass vulnerabilities or weak authentication logic.",
+  "Insecure Direct Object Reference": "Flag any potential IDOR vulnerabilities where user input directly references objects without authorization checks."
+}
