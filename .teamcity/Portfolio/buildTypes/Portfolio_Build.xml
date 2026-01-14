@@ -145,8 +145,7 @@ return $result]]></param>
       </runner>
       <runner id="Set_Version" name="Set Version" type="simpleRunner">
         <parameters>
-          <param name="script.content"><![CDATA[git fetch --deepen=1000 || git fetch --unshallow
-npx nbgv cloud]]></param>
+          <param name="script.content" value="git cliff --config cliff.toml --latest" />
           <param name="teamcity.step.mode" value="default" />
           <param name="use.custom.script" value="true" />
         </parameters>
