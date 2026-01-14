@@ -289,42 +289,27 @@ exit 0]]></param>
           <param name="teamcity.step.mode" value="execute_if_failed" />
         </parameters>
       </runner>
-      <runner id="Set_changelog" name="Set changelog" type="jetbrains_powershell">
+      <runner id="Set_changelog" name="Tag Release" type="jetbrains_powershell">
         <parameters>
           <param name="jetbrains_powershell_execution" value="PS1" />
           <param name="jetbrains_powershell_noprofile" value="true" />
-          <param name="jetbrains_powershell_script_code"><![CDATA[# Check if major or minor version (add your IsMajorOrMinorVersion logic)
-    if ($version -match '^v?\d+\.\d+\.0$') {
-        $changelogArgs = @(
-            "--latest-version", $version,
-            "--commit-limit", "false",
-            "--unreleased",
-            "--template", "compact",
-            "--commit-url", "false",
-            "--issue-url", "false",
-            "--merge-url", "false",
-            "--compare-url", "false",
-            "--breaking-pattern", "BREAKING CHANGE:",
-            "--tag-prefix", "v",
-            "--type-to-emoji", "feat=✨",
-            "--type-to-emoji", "fix=🐛",
-            "--type-to-emoji", "perf=⚡",
-            "--type-to-emoji", "refactor=♻️",
-            "--type-to-emoji", "style=💄",
-            "--type-to-emoji", "docs=📚",
-            "--type-to-emoji", "test=🧪",
-            "--type-to-emoji", "build=🏗️",
-            "--type-to-emoji", "ci=👷",
-            "--type-to-emoji", "chore=🔧",
-            "--type-to-emoji", "revert=⏪",
-            "--type-to-emoji", "security=🔒"
-        )
-        
-        & auto-changelog $changelogArgs
-        Write-Host "Updated changelog for version $version with emojis"
-    } else {
-        Write-Host "Skipping changelog update for patch version $version"
-    }]]></param>
+          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
+
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
+
+$tag = "v$next"
+
+# Safety: don't re-tag if it already exists
+$existing = git tag -l $tag
+if ($existing) {
+  Write-Host "Tag $tag already exists. Skipping."
+  exit 0
+}
+
+git tag $tag
+git push origin $tag
+Write-Host "Created and pushed tag $tag"]]></param>
           <param name="jetbrains_powershell_script_mode" value="CODE" />
           <param name="teamcity.step.mode" value="execute_if_failed" />
         </parameters>
