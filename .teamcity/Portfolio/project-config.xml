@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" uuid="25b3d554-859f-475c-9a0d-f198f7960ca0" xsi:noNamespaceSchemaLocation="https://www.jetbrains.com/teamcity/schemas/2025.3/project-config.xsd">
-  <name>Portfolio</name>
+  <name>devops-gurdip-portfolio</name>
   <parameters>
-    <param name="env.COSIGN_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/COSIGN_KEY!/cosign_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
-    <param name="env.DTRACK_API_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/DTRACK_API_KEY!/a' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
-    <param name="env.HARBOR_ROBOT" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/HARBOR_ROBOT!/harbor_robot' display='hidden' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
-    <param name="env.OCTOPUS_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/OCTOPUS_KEY!/octopus_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+    <param name="env.ANTHROPIC_API_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kvv2/data/ANTHROPIC_API_KEY!/anthropic_api_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+    <param name="env.COSIGN_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kvv2/data/COSIGN_KEY!/cosign_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+    <param name="env.DTRACK_API_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kvv2/data/DTRACK_API_KEY!/a' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+    <param name="env.OCTOPUS_KEY" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kvv2/data/OCTOPUS_KEY!/octopus_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
     <param name="env.OctopusProjectName" value="Portfolio" />
     <param name="env.OctopusServerUrl" value="http://octopusd.gssira.com" />
-    <param name="env.SNYK_TOKEN" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/SNYK_TOKEN!/snyk_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+    <param name="env.SNYK_TOKEN" value="" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kvv2/data/SNYK_TOKEN!/snyk_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
     <param name="env.blah" value="sdffd" spec="text display='hidden' description='ffdfd' validationMode='any'" />
-    <param name="env.dsdsdsdsd" value="dsdsdss" spec="remote remoteType='hashicorp-vault' teamcity_hashicorp_vault_vaultQuery='kv/data/OCTOPUS_KEY!/octopus_key' display='hidden' teamcity_hashicorp_vault_namespace='PortfolioSecrets' description='dsdsds' label='dsdss' projectId='Portfolio'" />
   </parameters>
   <project-extensions>
     <extension id="PROJECT_EXT_4" type="versionedSettings">

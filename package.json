@@ -1,6 +1,5 @@
 {
-  "name": "vite_react_shadcn_ts",
-  "private": true,
+  "name": "@gurdip/portfolio",
   "version": "2.1.14.61555",
   "type": "module",
   "scripts": {
@@ -9,8 +8,9 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "prepare": "husky",
-    "precommit": "dotnet run --project build --target Compile",
+    "prepare": "",
+    "precommit": "",
+    "lhci": "npx lhci autorun",
     "cspell": "cspell ."
   },
   "dependencies": {
@@ -53,11 +53,11 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.3.0",
     "html-to-image": "^1.11.13",
-    "husky": "^9.1.7",
     "input-otp": "^1.2.4",
     "jspdf": "^3.0.1",
     "lucide-react": "^0.462.0",
     "nerdbank-gitversioning": "^3.8.38-alpha",
+    "netlify-cli": "^23.10.0",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -75,6 +75,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.26.0",
+    "@lhci/cli": "^0.15.1",
+    "@netlify/plugin-lighthouse": "^6.0.4",
+    "@sentry/react": "^10.25.0",
     "@sonar/scan": "^4.3.0",
     "@tailwindcss/typography": "^0.5.15",
     "@types/node": "^22.5.5",

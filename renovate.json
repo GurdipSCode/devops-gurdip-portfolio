@@ -1,0 +1,3 @@
+{
+  "extends": ["github>GurdipSCode/renovate-config:javascript.json"]
+}

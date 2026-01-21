@@ -1,0 +1,50 @@
+# lefthook.yml
+pre-commit:
+  parallel: true
+  commands:
+    gitguardian:
+      run: |
+        Write-Host "🔒 Running GitGuardian secret scan..."
+        if (Get-Command ggshield -ErrorAction SilentlyContinue) {
+          ggshield secret scan pre-commit --staged
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } else {
+          Write-Host "⚠️ GitGuardian (ggshield) not found. Skipping scan."
+        }
+    oxlint:
+      run: |
+        Write-Host "🧹 Running Oxlint..."
+        if (Test-Path ".\node_modules\.bin\oxlint.cmd") {
+          & .\node_modules\.bin\oxlint.cmd --max-warnings=0 .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } elseif (Get-Command oxlint -ErrorAction SilentlyContinue) {
+          & oxlint --max-warnings=0 .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } else {
+          Write-Host "⚠️ Oxlint not found. Skipping lint."
+        }
+
+pre-push:
+  parallel: true
+  commands:
+    gitguardian:
+      run: |
+        Write-Host "🔍 Running full GitGuardian scan before push..."
+        if (Get-Command ggshield -ErrorAction SilentlyContinue) {
+          ggshield secret scan commit-range origin/main..HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } else {
+          Write-Host "⚠️ GitGuardian (ggshield) not found. Skipping scan."
+        }
+    oxlint:
+      run: |
+        Write-Host "🧪 Running Oxlint before push..."
+        if (Test-Path ".\node_modules\.bin\oxlint.cmd") {
+          & .\node_modules\.bin\oxlint.cmd --max-warnings=0 .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } elseif (Get-Command oxlint -ErrorAction SilentlyContinue) {
+          & oxlint --max-warnings=0 .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } else {
+          Write-Host "⚠️ Oxlint not found. Skipping lint."
+        }
