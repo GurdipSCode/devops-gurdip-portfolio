@@ -1,63 +1,1796 @@
-import jetbrains.buildServer.configs.kotlin.*
-import jetbrains.buildServer.configs.kotlin.buildFeatures.perfmon
-import jetbrains.buildServer.configs.kotlin.buildSteps.script
-import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
+<?xml version="1.0" encoding="UTF-8"?>
+<build-type xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" uuid="d56d2a4c-118d-4120-a0fe-8ff830a84cf3" xsi:noNamespaceSchemaLocation="https://www.jetbrains.com/teamcity/schemas/2025.3/project-config.xsd">
+  <name>Build</name>
+  <description />
+  <settings>
+    <options>
+      <option name="checkoutDirectory" value="portfolio" />
+      <option name="checkoutMode" value="ON_AGENT" />
+    </options>
+    <disabled-settings>
+      <setting-ref ref="Checkin_to_GitHub" />
+      <setting-ref ref="ExecuteSemgrep" />
+      <setting-ref ref="Sign_with_Cosign" />
+    </disabled-settings>
+    <parameters>
+      <param name="QODANA_TOKEN" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/QODANA_TOKEN!/qodana_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="SectionDirctory" value="%system.teamcity.build.checkoutDir%/src/data/sections" />
+      <param name="env.BUILD_VCS_URL" value="%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%" />
+      <param name="env.CLOUDSMITH_API_KEY" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/CLOUDSMITH_API_TOKEN!/cloudsmith_api_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="env.COSIGN_PASSWORD" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/COSIGN_PASSWORD!/cosign_password' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="env.DOTNET_CLI_HOME" value="/tmp" />
+      <param name="env.GITGUARDIAN_API_KEY" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/GITGUARDIAN_API_KEY!/gitguardian_api_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="env.GitGuardianDir" value="%teamcity.build.checkoutDir%/artifacts/gitguardian/" />
+      <param name="env.KOSLI_KEY" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/KOSLI_API_KEY!/kosli_api_key' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="env.OCTOPUS_PROJECT_NAME" value="Portfolio" />
+      <param name="env.SBOMPath" value="%teamcity.build.checkoutDir%/artifacts/cyclonedx/sbom.json" />
+      <param name="env.SEMGREP_APP_TOKEN" value="kvv2/data/SEMGREP_API_TOKEN!/semgrep_api_token" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/SEMGREP_TOKEN!/semgrep_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="env.SONAR_TOKEN" value="" spec="remote remoteType='hashicorp-vault' buildTypeId='Portfolio_Build' teamcity_hashicorp_vault_vaultQuery='kvv2/data/SONAR_TOKEN!/sonar_token' display='normal' teamcity_hashicorp_vault_namespace='PortfolioSecrets' projectId='Portfolio'" />
+      <param name="teamcity.url" value="%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" />
+    </parameters>
+    <build-runners>
+      <runner id="Create_artifact_dirs" name="Create artifact dirs" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[<#
+.SYNOPSIS
+  Build relative and absolute paths for artifact folders (and optionally create them).
 
-/*
-The settings script is an entry point for defining a TeamCity
-project hierarchy. The script should contain a single call to the
-project() function with a Project instance or an init function as
-an argument.
+.EXAMPLE
+  # Create folders (default)
+  .\mk-artifacts.ps1
 
-VcsRoots, BuildTypes, Templates, and subprojects can be
-registered inside the project using the vcsRoot(), buildType(),
-template(), and subProject() methods respectively.
+  # Only show path info, don't create
+  .\mk-artifacts.ps1 -Create:$false
+#>
 
-To debug settings scripts in command-line, run the
+param(
+    [switch] $Create = $true
+)
 
-    mvnDebug org.jetbrains.teamcity:teamcity-configs-maven-plugin:generate
+function Get-RepoRoot {
+    # Prefer TeamCity checkout dir if present
+    if ("%teamcity.build.checkoutDir%"-and (Test-Path "%teamcity.build.checkoutDir")) {
+        return (Resolve-Path -Path $env:BUILD_CHECKOUTDIR).Path
+    }
 
-command and attach your debugger to the port 8000.
+    # If git is available, try to find the git repo root
+    try {
+        $git = (Get-Command git -ErrorAction Stop)
+        $root = git rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -eq 0 -and $root) {
+            return (Resolve-Path -Path $root.Trim()).Path
+        }
+    } catch {
+        # ignore, fall back next
+    }
 
-To debug in IntelliJ Idea, open the 'Maven Projects' tool window (View
--> Tool Windows -> Maven Projects), find the generate task node
-(Plugins -> teamcity-configs -> teamcity-configs:generate), the
-'Debug' option is available in the context menu for the task.
-*/
+    # Fall back to script directory, or current directory if running interactively
+    if ($MyInvocation.MyCommand.Path) {
+        return (Resolve-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Path -Parent)).Path
+    }
 
-version = "2026.1"
+    return (Resolve-Path -Path .).Path
+}
 
-project {
+# main
+$baseDir = Get-RepoRoot
+Write-Host "Base directory: $baseDir"
 
-    buildType(Build)
+# list of artifact relative paths you asked for
+$relativePaths = @(
+    'artifacts\cyclonedx',
+    'artifacts\gitguardian',
+    'artifacts\snyk',
+    'artifacts\publish',
+    'artifacts\sonar',
+    'artifacts/fraim',
+    'artifacts/semgrep'
+)
 
-    features {
-        githubConnection {
-            id = "PROJECT_EXT_2"
-            displayName = "GitHub.com"
-            clientId = "Ov23liAmrqa9p50bSgoe"
-            clientSecret = "credentialsJSON:5138f84e-03c5-4492-ab19-1d365bca3f0e"
+$result = foreach ($rel in $relativePaths) {
+    # Keep the relative path as-is (relative to $baseDir)
+    $relNormalized = $rel -replace '/','\'
+
+    # compute absolute path
+    $abs = [System.IO.Path]::GetFullPath((Join-Path -Path $baseDir -ChildPath $relNormalized))
+
+    # create directory if requested
+    if ($Create) {
+        if (-not (Test-Path -Path $abs)) {
+            New-Item -ItemType Directory -Path $abs -Force | Out-Null
+            $created = $true
+        } else {
+            $created = $false
+        }
+    } else {
+        $created = $false
+    }
+
+    [PSCustomObject]@{
+        Name         = Split-Path -Path $relNormalized -Leaf
+        RelativePath = $relNormalized
+        AbsolutePath = $abs
+        Created      = $created
+    }
+}
+
+# show nicely
+$result | Format-Table -AutoSize
+
+# export to variables in the current session if the script is dot-sourced:
+# e.g. `. .\mk-artifacts.ps1` then $Artifacts will be available
+$Artifacts = $result
+
+# also return the array for pipelines
+return $result]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="simpleRunner_1" name="NPM Install" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npm install" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="NPM_Build" name="NPM Build" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npm run build" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="Compute_Version" name="Compute Version" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Always ensure tags are present locally
+git fetch --tags --force | Out-Host
+
+# Next SemVer computed from commits since last tag (Conventional Commits)
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+
+if ([string]::IsNullOrWhiteSpace($next)) {
+  Write-Host "No version bump detected (no unreleased changes)."
+  exit 0
+}
+
+# TeamCity PR builds expose this parameter (if PR build feature is enabled)
+$prNumber = "%teamcity.pullRequest.number%"
+$isPR = $prNumber -and $prNumber -ne "%teamcity.pullRequest.number%"
+
+if ($isPR) {
+  # PR build: pre-release version, no git tag
+  $version = "$next-pr.$prNumber"
+} else {
+  # Main build: release-looking version (we'll actually tag in a later step)
+  $version = "v$next"
+}
+
+Write-Host "Computed version: $version"
+Write-Host "##teamcity[buildNumber '$version']"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+      <runner id="Generate_Changelog" name="Generate Changelog" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
+
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
+
+# Create release notes using the version label we computed
+git cliff --config cliff.toml --unreleased --tag "v$next" -o CHANGELOG.md
+Write-Host "Generated CHANGELOG.md for v$next"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+      <runner id="Set_changelog" name="Tag Release" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[git fetch --tags --force | Out-Host
+
+$next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+if ([string]::IsNullOrWhiteSpace($next)) { exit 0 }
+
+$tag = "v$next"
+
+# Safety: don't re-tag if it already exists
+$existing = git tag -l $tag
+if ($existing) {
+  Write-Host "Tag $tag already exists. Skipping."
+  exit 0
+}
+
+git tag $tag
+git push origin $tag
+Write-Host "Created and pushed tag $tag"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Set_Version" name="Set Version" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="git cliff --config cliff.toml --latest" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="CSpell" name="CSpell" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npx cspell --config cspell.json &quot;**/*.{js,ts,md,txt}&quot;" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="Copy_package_json_to_dist" name="Copy package.json to dist" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code" value="Copy-Item -Path &quot;package.json&quot; -Destination &quot;dist/package.json&quot; -Force" />
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Set_Version_1" name="Set Package/Lock Versions" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_scriptArguments" value="-Version %build.number%" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[param(
+    [Parameter(Mandatory=$true)]
+    [string]$Version
+)
+
+Write-Host "Updating package files to version: $Version" -ForegroundColor Cyan
+
+function Update-JsonVersion {
+    param(
+        [string]$FilePath,
+        [string]$Version
+    )
+    
+    if (-not (Test-Path $FilePath)) {
+        Write-Warning "$FilePath not found, skipping..."
+        return $false
+    }
+    
+    Write-Host "Updating $FilePath..." -ForegroundColor Cyan
+    
+    try {
+        $content = Get-Content $FilePath -Raw
+        $pattern = '("version"\s*:\s*)"[^"]*"'
+        $replacement = "`$1`"$Version`""
+        
+        if ($content -match $pattern) {
+            $newContent = $content -replace $pattern, $replacement
+            Set-Content -Path $FilePath -Value $newContent -NoNewline -Encoding UTF8
+            Write-Host "Successfully updated $FilePath" -ForegroundColor Green
+            return $true
+        }
+        else {
+            Write-Warning "Could not find version field in $FilePath"
+            return $false
+        }
+    }
+    catch {
+        Write-Error "Failed to update ${FilePath}: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+# Update all files
+$packageJsonUpdated = Update-JsonVersion -FilePath "package.json" -Version $Version
+$packageLockUpdated = Update-JsonVersion -FilePath "package-lock.json" -Version $Version
+$distPackageJsonUpdated = Update-JsonVersion -FilePath "dist/package.json" -Version $Version
+
+# Summary
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "Version Update Summary" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Version: $Version" -ForegroundColor Yellow
+Write-Host "package.json: $(if($packageJsonUpdated){'Updated'}else{'Failed'})" -ForegroundColor $(if($packageJsonUpdated){'Green'}else{'Red'})
+Write-Host "package-lock.json: $(if($packageLockUpdated){'Updated'}else{'Failed'})" -ForegroundColor $(if($packageLockUpdated){'Green'}else{'Red'})
+Write-Host "dist/package.json: $(if($distPackageJsonUpdated){'Updated'}else{'Failed'})" -ForegroundColor $(if($distPackageJsonUpdated){'Green'}else{'Red'})
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+# Exit with error if any update failed
+if (-not $packageJsonUpdated -or -not $packageLockUpdated -or -not $distPackageJsonUpdated) {
+    Write-Error "One or more package files failed to update"
+    exit 1
+}
+
+Write-Host "All package files updated successfully!" -ForegroundColor Green
+exit 0]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="ExecuteSemgrep" name="Execute Semgrep" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Semgrep CI Scan Script
+# Executes Semgrep scan and saves SARIF results to /artifacts/semgrep
+
+# Set variables
+$artifactsPath = "/artifacts/semgrep"
+$sarifOutputFile = "$artifactsPath/semgrep-results.sarif"
+
+# Create the semgrep directory only if it doesn't exist
+if (-not (Test-Path -Path $artifactsPath)) {
+    Write-Host "Creating output directory: $artifactsPath" -ForegroundColor Cyan
+    New-Item -ItemType Directory -Path $artifactsPath | Out-Null
+} else {
+    Write-Host "Output directory already exists: $artifactsPath" -ForegroundColor Gray
+}
+
+# Run Semgrep CI scan with SARIF output
+Write-Host "Running Semgrep CI scan..." -ForegroundColor Cyan
+try {
+	$env:SEMGREP_APP_TOKEN = "%env.SEMGREP_APP_TOKEN%"
+	semgrep login
+    semgrep ci --sarif --output $sarifOutputFile
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Semgrep scan completed successfully!" -ForegroundColor Green
+        Write-Host "Results saved to: $sarifOutputFile" -ForegroundColor Green
+    } else {
+        Write-Host "⚠ Semgrep scan completed with findings (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+        Write-Host "Results saved to: $sarifOutputFile" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "✗ Error running Semgrep scan: $_" -ForegroundColor Red
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Run_CycloneDX" name="Run CycloneDX" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[$sbomPath = $env:SBOMPath
+
+Write-Host "Generating SBOM..." -ForegroundColor Cyan
+
+# Generate SBOM
+npx cyclonedx-npm --output-file $sbomPath
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n✓ SBOM generated successfully at: $sbomPath" -ForegroundColor Green
+    
+    # Display contents
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "SBOM Contents:" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Get-Content $sbomPath | Write-Host
+    Write-Host "========================================`n" -ForegroundColor Cyan
+} else {
+    Write-Error "Failed to generate SBOM"
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Run_Sonar_Scan" name="Run Sonar Scan" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="jetbrains_powershell" name="Execute Fraim (1)" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[$prNumber = "$env:teamcity_pullRequest_number" 
+$repo = "$env:teamcity_pullRequest_repository"
+$prUrl = "https://github.com/$repo/pull/$prNumber"
+Write-Host "PR URL: $prUrl"
+$env:SEMGREP_API_KEY = $env:ANTHROPIC_API_KEY
+
+# Automated PR analysis with team notification
+fraim run risk_flagger --location . --diff --base main --head HEAD   `
+  --pr-url $prUrl  `
+  --approver security-team  `
+  --custom-risk-list-json '{"Example Rule": "Flag this rule on every diff, it is an example to show how the workflow works."}'  `
+  --custom-risk-list-action replace]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Scan_with_Qodana" name="Scan with Qodana" type="Qodana">
+        <parameters>
+          <param name="arguments-entry-point-docker" value="--ide QDJS" />
+          <param name="cli" value="v2025.1.1" />
+          <param name="code-inspection-xml-config" value="Default" />
+          <param name="namesAndTags" value="custom" />
+          <param name="secure:cloud-token" value="zxx1af0235e338982e6" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Checkin_to_GitHub" name="Checkin to GitHub" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Commit and push changes to GitHub repository
+try {
+    Write-Host "Getting repository information..."
+    
+    # Get repository name from git remote
+    $repoName = (Split-Path -Leaf (git remote get-url origin)).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to get repository name. Exit code: $LASTEXITCODE"
+        exit 1
+    }
+    
+    # Extract repository owner from remote URL
+    $remoteUrl = git remote get-url origin
+    if ($remoteUrl -match 'github\.com[:/]([^/]+)/') {
+        $repoOwner = $Matches[1]
+    } else {
+        Write-Error "Could not determine repository owner from remote URL: $remoteUrl"
+        exit 1
+    }
+    
+    Write-Host "Repository: $repoOwner/$repoName"
+    Write-Host "Remote URL: $remoteUrl"
+    
+    # Git add
+    Write-Host "`nStaging changes..."
+    git add -A
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Git add failed with exit code: $LASTEXITCODE"
+    }
+    
+    # Git commit
+    Write-Host "`nCommitting changes..."
+    git commit --no-verify -m "chore(ci): checking in changed code from local ci"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Git commit failed with exit code: $LASTEXITCODE (possibly nothing to commit)"
+        Write-Host "Skipping push."
+        exit 0
+    }
+    
+    # Git push with token authentication
+    Write-Host "`nPushing to GitHub..."
+    $pushUrl = "https://$env:GITHUB_TOKEN@github.com/$repoOwner/$repoName"
+    git push $pushUrl
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Git push failed with exit code: $LASTEXITCODE"
+        exit 1
+    }
+    
+    Write-Host "`nSuccessfully pushed changes to GitHub" -ForegroundColor Green
+    exit 0
+}
+catch {
+    Write-Error "Failed to check in to GitHub: $($_.Exception.Message)"
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Execute_GitGuardian" name="Execute GitGuardian" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Ensure the GitGuardian directory exists
+if (-not (Test-Path $env:GitGuardianDir)) {
+    New-Item -ItemType Directory -Path $env:GitGuardianDir | Out-Null
+}
+
+# Run the scan, prettify JSON, and save to SARIF file
+ggshield secret scan commit-range HEAD~1 --format sarif |
+    ConvertFrom-Json |
+    ConvertTo-Json -Depth 10 |
+    Tee-Object -FilePath "$env:GitGuardianDir\results.sarif"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Create_Kosli_Flow" name="Create Kosli Flow &amp; Trail" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# Kosli Begin Trail - TeamCity Build Step
+
+Write-Host "Starting Kosli Begin Trail..."
+
+$ErrorActionPreference = "Stop"
+
+# CONFIGURATION
+$KosliOrg = "gurdipdevops"
+$FlowName = "portfolio-flow"
+$FlowDescription = "Flow for governance attestation"
+$FlowRepo = "xxx"
+$repoUrl = "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%"
+####
+
+# Check if flow exists
+$flowExists = kosli list flow --org $KosliOrg --api-token %env.KOSLI_KEY% | Select-String $FlowName
+
+if (-not $flowExists) {
+    Write-Host "Creating Kosli flow: $FlowName..."
+    kosli create flow $flowName --org $KosliOrg --description $FlowDescription --api-token %env.KOSLI_KEY%
+} else {
+    Write-Host "Flow $FlowName already exists."
+}
+
+kosli begin trail "Portfolio-trail-%build.number%" --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER%" --flow $flowName --org $KosliOrg --api-token %env.KOSLI_KEY%
+
+Write-Host "Kosli Begin Trail completed successfully."]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Package_dist_folder" name="Package dist folder" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# ===========================
+# Configuration Variables
+# ===========================
+
+$DIST_FOLDER = "dist"
+$OUTPUT_FOLDER = "artifacts/publish"
+$PACKAGE_NAME = "Portfolio"
+
+# ===========================
+# Error Handling
+# ===========================
+$ErrorActionPreference = "Stop"
+
+# ===========================
+# Functions
+# ===========================
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n##teamcity[progressMessage '$Message']"
+    Write-Host "===> $Message" -ForegroundColor Cyan
+}
+
+function Write-Success {
+    param([string]$Message)
+    Write-Host "✓ $Message" -ForegroundColor Green
+}
+
+function Write-Error {
+    param([string]$Message)
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
+# ===========================
+# Main Execution
+# ===========================
+
+try {
+    Write-Host "======================================"
+    Write-Host "NPM Package Creation"
+    Write-Host "======================================`n"
+    
+    # Verify dist folder exists
+    if (-not (Test-Path $DIST_FOLDER)) {
+        throw "Dist folder not found: $DIST_FOLDER"
+    }
+    
+    Write-Success "Dist folder found: $DIST_FOLDER"
+    
+    # Create output folder if it doesn't exist
+    Write-Step "Creating output folder"
+    if (-not (Test-Path $OUTPUT_FOLDER)) {
+        New-Item -ItemType Directory -Path $OUTPUT_FOLDER -Force | Out-Null
+        Write-Success "Created: $OUTPUT_FOLDER"
+    } else {
+        Write-Success "Output folder exists: $OUTPUT_FOLDER"
+    }
+    
+    # Pack the npm package
+    Write-Step "Packing npm package"
+    
+    Push-Location $DIST_FOLDER
+    try {
+        # Read package.json to get version
+        $packageJsonPath = "package.json"
+        if (-not (Test-Path $packageJsonPath)) {
+            throw "package.json not found in $DIST_FOLDER"
+        }
+        
+        $packageJson = Get-Content $packageJsonPath -Raw | ConvertFrom-Json
+        $version = $packageJson.version
+        
+        Write-Host "Package version: $version"
+        
+        # Pack the package
+        npm pack
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm pack failed with exit code $LASTEXITCODE"
+        }
+        
+        # Find the created tarball
+        $tarball = Get-ChildItem -Filter "*.tgz" | Select-Object -First 1
+        
+        if (-not $tarball) {
+            throw "No .tgz file found after npm pack"
+        }
+        
+        Write-Success "Package created: $($tarball.Name)"
+        
+        # Create new filename with version
+        $newFileName = "$PACKAGE_NAME-$version.tgz"
+        
+        Write-Step "Renaming package to: $newFileName"
+        
+        $destination = Join-Path (Resolve-Path "..") $OUTPUT_FOLDER
+        $destinationFile = Join-Path $destination $newFileName
+        
+        # Remove existing file if present
+        if (Test-Path $destinationFile) {
+            Remove-Item $destinationFile -Force
+            Write-Host "Removed existing file: $newFileName"
+        }
+        
+        # Rename and move
+        Rename-Item $tarball.FullName $newFileName
+        $renamedTarball = Get-Item $newFileName
+        Move-Item $renamedTarball.FullName $destination -Force
+        
+        Write-Success "Moved to: $destinationFile"
+        
+        # Verify the file exists in destination
+        if (Test-Path $destinationFile) {
+            $fileInfo = Get-Item $destinationFile
+            Write-Host "`nPackage Details:"
+            Write-Host "  Name: $($fileInfo.Name)"
+            Write-Host "  Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+            Write-Host "  Path: $($fileInfo.FullName)"
+        }
+        
+    }
+    finally {
+        Pop-Location
+    }
+    
+    Write-Host "`n======================================"
+    Write-Success "Package creation completed successfully!"
+    Write-Host "======================================`n"
+    
+    exit 0
+}
+catch {
+    Write-Host "`n======================================"
+    Write-Error "Package creation failed: $_"
+    Write-Host "======================================`n"
+    Write-Host $_.ScriptStackTrace
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Sign_with_Cosign" name="Sign with Cosign &amp; Push Package" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# ===========================
+# Configuration Variables
+# ===========================
+
+# TeamCity Parameters
+$COSIGN_PRIVATE_KEY = "%env.COSIGN_KEY%"  # TeamCity secure parameter
+$COSIGN_PASSWORD  = "%env.COSIGN_PASSWORD%"        # TeamCity secure parameter (if key is encrypted)
+$CLOUDSMITH_API_KEY = "%env.CLOUDSMITH_API_KEY%"  # TeamCity secure parameter
+
+# Cloudsmith Configuration
+$CLOUDSMITH_ORG = "gurdipdevops"
+$CLOUDSMITH_REPO = "portfolio"
+$CLOUDSMITH_RAW_REPO = "portfolio-raw"  # Repository for cosign artifacts zip
+
+# Package Configuration
+$PACKAGE_PATH = "dist"  # Path to your package.json directory
+$TARBALL_PATH = "artifacts/publish"  # Path to your tarball files
+$PACKAGE_JSON = Join-Path $PACKAGE_PATH "package.json"
+
+# DEBUG OUTPUT
+Write-Host "DEBUG: PACKAGE_PATH = '$PACKAGE_PATH'" -ForegroundColor Yellow
+Write-Host "DEBUG: TARBALL_PATH = '$TARBALL_PATH'" -ForegroundColor Yellow
+Write-Host "DEBUG: PACKAGE_JSON = '$PACKAGE_JSON'" -ForegroundColor Yellow
+Write-Host "DEBUG: Current Directory = '$(Get-Location)'" -ForegroundColor Yellow
+
+# Cosign Configuration
+$COSIGN_VERSION = "v2.2.3"
+$COSIGN_URL = "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-windows-amd64.exe"
+
+# ===========================
+# Error Handling
+# ===========================
+$ErrorActionPreference = "Stop"
+
+# ===========================
+# Functions
+# ===========================
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n##teamcity[progressMessage '$Message']"
+    Write-Host "===> $Message" -ForegroundColor Cyan
+}
+
+function Write-Success {
+    param([string]$Message)
+    Write-Host "✓ $Message" -ForegroundColor Green
+}
+
+function Write-Error {
+    param([string]$Message)
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
+function Install-Cosign {
+    Write-Step "Installing Cosign"
+    
+    $cosignPath = Join-Path $env:TEMP "cosign.exe"
+    
+    if (Test-Path $cosignPath) {
+        Write-Success "Cosign already downloaded"
+        return $cosignPath
+    }
+    
+    try {
+        Invoke-WebRequest -Uri $COSIGN_URL -OutFile $cosignPath
+        Write-Success "Cosign downloaded successfully"
+        return $cosignPath
+    }
+    catch {
+        Write-Error "Failed to download Cosign: $_"
+        throw
+    }
+}
+
+function Get-PackageInfo {
+    Write-Step "Reading package information"
+    
+    # DEBUG: Show what we're looking for
+    Write-Host "DEBUG: Checking for package.json at: $PACKAGE_JSON" -ForegroundColor Yellow
+    Write-Host "DEBUG: Test-Path result: $(Test-Path $PACKAGE_JSON)" -ForegroundColor Yellow
+    
+    if (-not (Test-Path $PACKAGE_JSON)) {
+        # List files in PACKAGE_PATH for debugging
+        Write-Host "DEBUG: Contents of '$PACKAGE_PATH':" -ForegroundColor Yellow
+        if (Test-Path $PACKAGE_PATH) {
+            Get-ChildItem -Path $PACKAGE_PATH | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Yellow }
+        } else {
+            Write-Host "  Directory does not exist!" -ForegroundColor Red
+        }
+        throw "package.json not found at $PACKAGE_JSON"
+    }
+    
+    $packageData = Get-Content $PACKAGE_JSON -Raw | ConvertFrom-Json
+    $packageName = $packageData.name
+    $packageVersion = $packageData.version
+    
+    Write-Host "Package: $packageName"
+    Write-Host "Version: $packageVersion"
+    
+    return @{
+        Name = $packageName
+        Version = $packageVersion
+        FullName = "$packageName-$packageVersion"
+    }
+}
+
+function Find-PackageTarball {
+    param(
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Looking for existing package tarball"
+    
+    # Expected tarball name format
+    $tarballPattern = "$($PackageName.Replace('@','').Replace('/','-'))-$PackageVersion.tgz"
+    
+    Write-Host "DEBUG: Looking for tarball: $tarballPattern" -ForegroundColor Yellow
+    
+    # Search in tarball path first, then package path, then current directory
+    $searchPaths = @($TARBALL_PATH, $PACKAGE_PATH, ".")
+    
+    Write-Host "DEBUG: Search paths: $($searchPaths -join ', ')" -ForegroundColor Yellow
+    
+    foreach ($searchPath in $searchPaths) {
+        # Skip if path doesn't exist
+        if (-not (Test-Path $searchPath)) {
+            Write-Host "DEBUG: Search path does not exist: $searchPath" -ForegroundColor Yellow
+            continue
+        }
+        
+        Write-Host "DEBUG: Searching in: $searchPath" -ForegroundColor Yellow
+        
+        $tarball = Get-ChildItem -Path $searchPath -Filter $tarballPattern -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($tarball) {
+            Write-Success "Found package tarball: $($tarball.FullName)"
+            return $tarball.FullName
+        }
+    }
+    
+    # If not found with exact name, try to find any .tgz file in tarball path first
+    foreach ($searchPath in $searchPaths) {
+        if (-not (Test-Path $searchPath)) {
+            continue
+        }
+        
+        $anyTarball = Get-ChildItem -Path $searchPath -Filter "*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($anyTarball) {
+            Write-Host "Warning: Using tarball $($anyTarball.Name) from $searchPath - verify this is correct"
+            return $anyTarball.FullName
+        }
+    }
+    
+    throw "Package tarball not found. Expected: $tarballPattern in paths: $($searchPaths -join ', ')"
+}
+
+function Create-Provenance {
+    param(
+        [string]$PackageTarball,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Creating provenance file"
+    
+    $buildUrl = $env:BUILD_URL
+    $buildId = $env:BUILD_ID
+    $vcsRevision = $env:BUILD_VCS_NUMBER
+    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    
+    $provenance = @{
+        "_type" = "https://in-toto.io/Statement/v0.1"
+        "subject" = @(
+            @{
+                "name" = $PackageName
+                "digest" = @{
+                    "sha256" = (Get-FileHash -Path $PackageTarball -Algorithm SHA256).Hash.ToLower()
+                }
+            }
+        )
+        "predicateType" = "https://slsa.dev/provenance/v0.2"
+        "predicate" = @{
+            "builder" = @{
+                "id" = "TeamCity"
+            }
+            "buildType" = "teamcity-build"
+            "invocation" = @{
+                "configSource" = @{
+                    "uri" = $vcsRevision
+                    "digest" = @{
+                        "sha1" = $vcsRevision
+                    }
+                }
+            }
+            "metadata" = @{
+                "buildInvocationId" = $buildId
+                "buildStartedOn" = $timestamp
+                "completeness" = @{
+                    "parameters" = $true
+                    "environment" = $false
+                    "materials" = $true
+                }
+            }
+            "materials" = @(
+                @{
+                    "uri" = "pkg:npm/$PackageName@$PackageVersion"
+                }
+            )
+        }
+    } | ConvertTo-Json -Depth 10
+    
+    $provenanceFile = "$PackageTarball.provenance.json"
+    $provenance | Out-File -FilePath $provenanceFile -Encoding utf8
+    
+    Write-Success "Provenance file created: $provenanceFile"
+    return $provenanceFile
+}
+
+function Sign-WithCosign {
+    param(
+        [string]$CosignPath,
+        [string]$FilePath
+    )
+    
+    Write-Step "Signing $FilePath with Cosign"
+    
+    # Save private key to temporary file
+    $keyFile = Join-Path $env:TEMP "cosign.key"
+    $COSIGN_PRIVATE_KEY | Out-File -FilePath $keyFile -Encoding utf8 -NoNewline
+    
+    try {
+        # Set environment variable for password if provided
+        if ($COSIGN_PASSWORD) {
+            $env:COSIGN_PASSWORD = $COSIGN_PASSWORD
+        }
+        
+        # Sign the file
+        & $CosignPath sign-blob --key $keyFile --output-signature "$FilePath.sig" --output-certificate "$FilePath.pem" $FilePath
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cosign signing failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "File signed successfully"
+        Write-Host "  - Signature: $FilePath.sig"
+        Write-Host "  - Certificate: $FilePath.pem"
+    }
+    finally {
+        # Clean up key file
+        if (Test-Path $keyFile) {
+            Remove-Item $keyFile -Force
+        }
+        # Clean up environment variable
+        if ($env:COSIGN_PASSWORD) {
+            Remove-Item Env:\COSIGN_PASSWORD
         }
     }
 }
 
-object Build : BuildType({
-    name = "Build"
-
-    vcs {
-        root(DslContext.settingsRoot)
+function Create-Attestation {
+    param(
+        [string]$CosignPath,
+        [string]$ProvenanceFile,
+        [string]$PackageTarball
+    )
+    
+    Write-Step "Creating attestation"
+    
+    # Save private key to temporary file
+    $keyFile = Join-Path $env:TEMP "cosign.key"
+    $COSIGN_PRIVATE_KEY | Out-File -FilePath $keyFile -Encoding utf8 -NoNewline
+    
+    try {
+        if ($COSIGN_PASSWORD) {
+            $env:COSIGN_PASSWORD = $COSIGN_PASSWORD
+        }
+        
+        # Create attestation
+        & $CosignPath attest --key $keyFile --predicate $ProvenanceFile --type slsaprovenance $PackageTarball
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cosign attestation failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "Attestation created successfully"
     }
-
-    steps {
-        script {
-            name = "NPM Build"
-            id = "NPM_Build"
-            scriptContent = "npm run build"
+    finally {
+        if (Test-Path $keyFile) {
+            Remove-Item $keyFile -Force
+        }
+        if ($env:COSIGN_PASSWORD) {
+            Remove-Item Env:\COSIGN_PASSWORD
         }
     }
+}
 
-    features {
-        perfmon {
+function Create-ArtifactsZip {
+    param(
+        [string]$PackageTarball,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Creating cosign artifacts zip"
+    
+    $sigFile = "$PackageTarball.sig"
+    $pemFile = "$PackageTarball.pem"
+    $provenanceFile = "$PackageTarball.provenance.json"
+    
+    $zipFileName = "$($PackageName.Replace('@','').Replace('/','-'))-$PackageVersion-cosign-artifacts.zip"
+    
+    # Save zip to tarball path if it exists, otherwise use package path
+    if (Test-Path $TARBALL_PATH) {
+        $zipPath = Join-Path $TARBALL_PATH $zipFileName
+    } else {
+        $zipPath = Join-Path $PACKAGE_PATH $zipFileName
+    }
+    
+    # Remove existing zip if present
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+    
+    # Create zip with all cosign artifacts
+    $filesToZip = @()
+    
+    if (Test-Path $sigFile) {
+        $filesToZip += $sigFile
+    } else {
+        Write-Host "Warning: Signature file not found: $sigFile"
+    }
+    
+    if (Test-Path $pemFile) {
+        $filesToZip += $pemFile
+    } else {
+        Write-Host "Warning: Certificate file not found: $pemFile"
+    }
+    
+    if (Test-Path $provenanceFile) {
+        $filesToZip += $provenanceFile
+    } else {
+        Write-Host "Warning: Provenance file not found: $provenanceFile"
+    }
+    
+    if ($filesToZip.Count -eq 0) {
+        throw "No cosign artifacts found to zip"
+    }
+    
+    Compress-Archive -Path $filesToZip -DestinationPath $zipPath -Force
+    
+    Write-Success "Artifacts zip created: $zipPath"
+    Write-Host "  Contents:"
+    foreach ($file in $filesToZip) {
+        Write-Host "    - $(Split-Path $file -Leaf)"
+    }
+    
+    return $zipPath
+}
+
+function Upload-ToCloudsmith {
+    param(
+        [string]$PackageTarball,
+        [string]$ArtifactsZip,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Uploading to Cloudsmith"
+    
+    # Install cloudsmith-cli if not available
+    if (-not (Get-Command cloudsmith -ErrorAction SilentlyContinue)) {
+        Write-Host "Installing cloudsmith-cli..."
+        pip install --upgrade cloudsmith-cli --break-system-packages
+    }
+    
+    # Upload package
+    $env:CLOUDSMITH_API_KEY = $CLOUDSMITH_API_KEY
+    
+    try {
+        # Upload npm package
+        Write-Host "Uploading npm package..."
+        cloudsmith push npm "$CLOUDSMITH_ORG/$CLOUDSMITH_REPO" $PackageTarball
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cloudsmith npm package upload failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "NPM package uploaded to Cloudsmith successfully"
+        
+        # Upload cosign artifacts zip as raw package
+        if (Test-Path $ArtifactsZip) {
+            Write-Host "Uploading cosign artifacts zip..."
+            cloudsmith push raw "$CLOUDSMITH_ORG/$CLOUDSMITH_RAW_REPO" $ArtifactsZip --name "$($PackageName.Replace('@','').Replace('/','-'))-cosign-artifacts" --version $PackageVersion --summary "Cosign signatures, certificates, and provenance for $PackageName@$PackageVersion"
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Warning: Failed to upload cosign artifacts zip (exit code $LASTEXITCODE)"
+            } else {
+                Write-Success "Cosign artifacts zip uploaded successfully"
+            }
+        }
+        
+        Write-Success "All artifacts uploaded"
+    }
+    finally {
+        Remove-Item Env:\CLOUDSMITH_API_KEY -ErrorAction SilentlyContinue
+    }
+}
+
+# ===========================
+# Main Execution
+# ===========================
+
+try {
+    Write-Host "======================================"
+    Write-Host "NPM Package Signing and Publishing"
+    Write-Host "======================================`n"
+    
+    # Validate required environment variables
+    if (-not $COSIGN_PRIVATE_KEY) {
+        throw "COSIGN_PRIVATE_KEY environment variable is not set"
+    }
+    
+    if (-not $CLOUDSMITH_API_KEY) {
+        throw "CLOUDSMITH_API_KEY environment variable is not set"
+    }
+    
+    # Install Cosign
+    $cosignPath = Install-Cosign
+    
+    # DEBUG: Show variable values before calling Get-PackageInfo
+    Write-Host "`nDEBUG: Before Get-PackageInfo call:" -ForegroundColor Yellow
+    Write-Host "  PACKAGE_PATH = '$PACKAGE_PATH'" -ForegroundColor Yellow
+    Write-Host "  PACKAGE_JSON = '$PACKAGE_JSON'" -ForegroundColor Yellow
+    
+    # Get package information
+    $packageInfo = Get-PackageInfo
+    
+    # Find existing package tarball
+    $packageTarball = Find-PackageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    Write-Success "Using package tarball: $packageTarball"
+    
+    # Create provenance
+    $provenanceFile = Create-Provenance -PackageTarball $packageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    # Sign package with Cosign
+    Sign-WithCosign -CosignPath $cosignPath -FilePath $packageTarball
+    
+    # Sign provenance file
+    Sign-WithCosign -CosignPath $cosignPath -FilePath $provenanceFile
+    
+    # Create attestation
+    Create-Attestation -CosignPath $cosignPath -ProvenanceFile $provenanceFile -PackageTarball $packageTarball
+    
+    # Create zip of all cosign artifacts
+    $artifactsZip = Create-ArtifactsZip -PackageTarball $packageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    # Upload to Cloudsmith
+    Upload-ToCloudsmith -PackageTarball $packageTarball -ArtifactsZip $artifactsZip -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    Write-Host "`n======================================"
+    Write-Success "Build completed successfully!"
+    Write-Host "======================================`n"
+    
+    exit 0
+}
+catch {
+    Write-Host "`n======================================"
+    Write-Error "Build failed: $_"
+    Write-Host "======================================`n"
+    Write-Host $_.ScriptStackTrace
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Cosign_and_Push_Package" name="Cosign and Push Package" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# ===========================
+# Configuration Variables
+# ===========================
+
+# TeamCity Parameters
+$COSIGN_PRIVATE_KEY = "%env.COSIGN_KEY%"  # TeamCity secure parameter
+$COSIGN_PASSWORD  = "%env.COSIGN_PASSWORD%"        # TeamCity secure parameter (if key is encrypted)
+$CLOUDSMITH_API_KEY = "%env.CLOUDSMITH_API_KEY%"  # TeamCity secure parameter
+
+# Cloudsmith Configuration
+$CLOUDSMITH_ORG = "gurdipdevops"
+$CLOUDSMITH_REPO = "portfolio"
+$CLOUDSMITH_RAW_REPO = "portfolio-raw"  # Repository for cosign artifacts zip
+
+# Package Configuration
+$PACKAGE_PATH = "dist"  # Path to your package.json directory
+$TARBALL_PATH = "artifacts/publish"  # Path to your tarball files
+$PACKAGE_JSON = Join-Path $PACKAGE_PATH "package.json"
+
+# Cosign Configuration
+$COSIGN_VERSION = "v2.2.3"
+$COSIGN_URL = "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-windows-amd64.exe"
+
+# ===========================
+# Error Handling
+# ===========================
+$ErrorActionPreference = "Stop"
+
+# ===========================
+# Functions
+# ===========================
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n##teamcity[progressMessage '$Message']"
+    Write-Host "===> $Message" -ForegroundColor Cyan
+}
+
+function Write-Success {
+    param([string]$Message)
+    Write-Host "✓ $Message" -ForegroundColor Green
+}
+
+function Write-Error {
+    param([string]$Message)
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
+function Install-Cosign {
+    Write-Step "Checking for Cosign"
+    
+    # First, check if cosign is already available in PATH
+    $existingCosign = Get-Command cosign -ErrorAction SilentlyContinue
+    if ($existingCosign) {
+        Write-Success "Using existing Cosign installation: $($existingCosign.Source)"
+        return $existingCosign.Source
+    }
+    
+    # If not in PATH, check if we've already downloaded it to TEMP
+    $cosignPath = Join-Path $env:TEMP "cosign.exe"
+    
+    if (Test-Path $cosignPath) {
+        Write-Success "Using previously downloaded Cosign from TEMP"
+        return $cosignPath
+    }
+    
+    # Download cosign if not found
+    Write-Host "Cosign not found, downloading version $COSIGN_VERSION..."
+    try {
+        Invoke-WebRequest -Uri $COSIGN_URL -OutFile $cosignPath
+        Write-Success "Cosign downloaded successfully to $cosignPath"
+        return $cosignPath
+    }
+    catch {
+        Write-Error "Failed to download Cosign: $_"
+        throw
+    }
+}
+
+function Get-PackageInfo {
+    Write-Step "Reading package information"
+    
+    if (-not (Test-Path $PACKAGE_JSON)) {
+        throw "package.json not found at $PACKAGE_JSON"
+    }
+    
+    $packageData = Get-Content $PACKAGE_JSON -Raw | ConvertFrom-Json
+    $packageName = $packageData.name
+    $packageVersion = $packageData.version
+    
+    Write-Host "Package: $packageName"
+    Write-Host "Version: $packageVersion"
+    
+    return @{
+        Name = $packageName
+        Version = $packageVersion
+        FullName = "$packageName-$packageVersion"
+    }
+}
+
+function Find-PackageTarball {
+    param(
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Looking for existing package tarball"
+    
+    # Expected tarball name format
+    $tarballPattern = "$($PackageName.Replace('@','').Replace('/','-'))-$PackageVersion.tgz"
+    
+    # Search in tarball path first, then package path, then current directory
+    $searchPaths = @($TARBALL_PATH, $PACKAGE_PATH, ".")
+    
+    foreach ($searchPath in $searchPaths) {
+        # Skip if path doesn't exist
+        if (-not (Test-Path $searchPath)) {
+            Write-Host "Search path does not exist: $searchPath"
+            continue
+        }
+        
+        $tarball = Get-ChildItem -Path $searchPath -Filter $tarballPattern -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($tarball) {
+            Write-Success "Found package tarball: $($tarball.FullName)"
+            return $tarball.FullName
         }
     }
-})
+    
+    # If not found with exact name, try to find any .tgz file in tarball path first
+    foreach ($searchPath in $searchPaths) {
+        if (-not (Test-Path $searchPath)) {
+            continue
+        }
+        
+        $anyTarball = Get-ChildItem -Path $searchPath -Filter "*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($anyTarball) {
+            Write-Host "Warning: Using tarball $($anyTarball.Name) from $searchPath - verify this is correct"
+            return $anyTarball.FullName
+        }
+    }
+    
+    throw "Package tarball not found. Expected: $tarballPattern in paths: $($searchPaths -join ', ')"
+}
+
+function Create-Provenance {
+    param(
+        [string]$PackageTarball,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Creating provenance file"
+    
+    $buildUrl = $env:BUILD_URL
+    $buildId = $env:BUILD_ID
+    $vcsRevision = $env:BUILD_VCS_NUMBER
+    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    
+    $provenance = @{
+        "_type" = "https://in-toto.io/Statement/v0.1"
+        "subject" = @(
+            @{
+                "name" = $PackageName
+                "digest" = @{
+                    "sha256" = (Get-FileHash -Path $PackageTarball -Algorithm SHA256).Hash.ToLower()
+                }
+            }
+        )
+        "predicateType" = "https://slsa.dev/provenance/v0.2"
+        "predicate" = @{
+            "builder" = @{
+                "id" = "TeamCity"
+            }
+            "buildType" = "teamcity-build"
+            "invocation" = @{
+                "configSource" = @{
+                    "uri" = $vcsRevision
+                    "digest" = @{
+                        "sha1" = $vcsRevision
+                    }
+                }
+            }
+            "metadata" = @{
+                "buildInvocationId" = $buildId
+                "buildStartedOn" = $timestamp
+                "completeness" = @{
+                    "parameters" = $true
+                    "environment" = $false
+                    "materials" = $true
+                }
+            }
+            "materials" = @(
+                @{
+                    "uri" = "pkg:npm/$PackageName@$PackageVersion"
+                }
+            )
+        }
+    } | ConvertTo-Json -Depth 10
+    
+    $provenanceFile = "$PackageTarball.provenance.json"
+    $provenance | Out-File -FilePath $provenanceFile -Encoding utf8
+    
+    Write-Success "Provenance file created: $provenanceFile"
+    return $provenanceFile
+}
+
+function Sign-WithCosign {
+    param(
+        [string]$CosignPath,
+        [string]$FilePath
+    )
+    
+    Write-Step "Signing $FilePath with Cosign"
+    
+    # Save private key to temporary file
+    $keyFile = Join-Path $env:TEMP "cosign.key"
+    
+    # Clean and write key with proper formatting
+    # Trim whitespace and ensure proper line endings
+    $cleanKey = $COSIGN_PRIVATE_KEY.Trim()
+    
+    # Write key using .NET to avoid PowerShell's BOM and encoding issues
+    [System.IO.File]::WriteAllText($keyFile, $cleanKey, [System.Text.UTF8Encoding]::new($false))
+    
+    # Verify key file was created
+    if (-not (Test-Path $keyFile)) {
+        throw "Failed to create key file at $keyFile"
+    }
+    Write-Host "Key file created: $keyFile ($(( Get-Item $keyFile).Length) bytes)"
+    
+    try {
+        # Set environment variable for password if provided
+        if ($COSIGN_PASSWORD) {
+            $env:COSIGN_PASSWORD = $COSIGN_PASSWORD
+        }
+        
+        # Sign the file (--yes auto-accepts transparency log upload prompt for automated builds)
+        & $CosignPath sign-blob --yes --key $keyFile --output-signature "$FilePath.sig" --output-certificate "$FilePath.pem" $FilePath
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cosign signing failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "File signed successfully"
+        Write-Host "  - Signature: $FilePath.sig"
+        Write-Host "  - Certificate: $FilePath.pem"
+    }
+    finally {
+        # Clean up key file
+        if (Test-Path $keyFile) {
+            Remove-Item $keyFile -Force
+        }
+        # Clean up environment variable
+        if ($env:COSIGN_PASSWORD) {
+            Remove-Item Env:\COSIGN_PASSWORD
+        }
+    }
+}
+
+function Create-Attestation {
+    param(
+        [string]$CosignPath,
+        [string]$ProvenanceFile,
+        [string]$PackageTarball
+    )
+    
+    Write-Step "Creating attestation"
+    
+    # Save private key to temporary file
+    $keyFile = Join-Path $env:TEMP "cosign.key"
+    
+    # Clean and write key with proper formatting
+    # Trim whitespace and ensure proper line endings
+    $cleanKey = $COSIGN_PRIVATE_KEY.Trim()
+    
+    # Write key using .NET to avoid PowerShell's BOM and encoding issues
+    [System.IO.File]::WriteAllText($keyFile, $cleanKey, [System.Text.UTF8Encoding]::new($false))
+    
+    try {
+        if ($COSIGN_PASSWORD) {
+            $env:COSIGN_PASSWORD = $COSIGN_PASSWORD
+        }
+        
+        # Create attestation (--yes auto-accepts transparency log upload prompt for automated builds)
+        & $CosignPath attest --yes --key $keyFile --predicate $ProvenanceFile --type slsaprovenance $PackageTarball
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cosign attestation failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "Attestation created successfully"
+    }
+    finally {
+        if (Test-Path $keyFile) {
+            Remove-Item $keyFile -Force
+        }
+        if ($env:COSIGN_PASSWORD) {
+            Remove-Item Env:\COSIGN_PASSWORD
+        }
+    }
+}
+
+function Create-ArtifactsZip {
+    param(
+        [string]$PackageTarball,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Creating cosign artifacts zip"
+    
+    $sigFile = "$PackageTarball.sig"
+    $pemFile = "$PackageTarball.pem"
+    $provenanceFile = "$PackageTarball.provenance.json"
+    
+    $zipFileName = "$($PackageName.Replace('@','').Replace('/','-'))-$PackageVersion-cosign-artifacts.zip"
+    
+    # Save zip to tarball path if it exists, otherwise use package path
+    if (Test-Path $TARBALL_PATH) {
+        $zipPath = Join-Path $TARBALL_PATH $zipFileName
+    } else {
+        $zipPath = Join-Path $PACKAGE_PATH $zipFileName
+    }
+    
+    # Remove existing zip if present
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+    
+    # Create zip with all cosign artifacts
+    $filesToZip = @()
+    
+    if (Test-Path $sigFile) {
+        $filesToZip += $sigFile
+    } else {
+        Write-Host "Warning: Signature file not found: $sigFile"
+    }
+    
+    if (Test-Path $pemFile) {
+        $filesToZip += $pemFile
+    } else {
+        Write-Host "Warning: Certificate file not found: $pemFile"
+    }
+    
+    if (Test-Path $provenanceFile) {
+        $filesToZip += $provenanceFile
+    } else {
+        Write-Host "Warning: Provenance file not found: $provenanceFile"
+    }
+    
+    if ($filesToZip.Count -eq 0) {
+        throw "No cosign artifacts found to zip"
+    }
+    
+    Compress-Archive -Path $filesToZip -DestinationPath $zipPath -Force
+    
+    Write-Success "Artifacts zip created: $zipPath"
+    Write-Host "  Contents:"
+    foreach ($file in $filesToZip) {
+        Write-Host "    - $(Split-Path $file -Leaf)"
+    }
+    
+    return $zipPath
+}
+
+function Upload-ToCloudsmith {
+    param(
+        [string]$PackageTarball,
+        [string]$ArtifactsZip,
+        [string]$PackageName,
+        [string]$PackageVersion
+    )
+    
+    Write-Step "Uploading to Cloudsmith"
+    
+    # Install cloudsmith-cli if not available
+    if (-not (Get-Command cloudsmith -ErrorAction SilentlyContinue)) {
+        Write-Host "Installing cloudsmith-cli..."
+        pip install --upgrade cloudsmith-cli --break-system-packages
+    }
+    
+    # Upload package
+    $env:CLOUDSMITH_API_KEY = $CLOUDSMITH_API_KEY
+    
+    # Get build number from TeamCity environment variable
+    $buildNumber = $env:BUILD_NUMBER
+    if (-not $buildNumber) {
+        $buildNumber = $PackageVersion
+        Write-Host "Warning: BUILD_NUMBER not set, using package version: $buildNumber"
+    }
+    
+    try {
+        # Upload raw package
+        Write-Host "Uploading raw package..."		
+        py -3.11 -m cloudsmith_cli push raw "$($CLOUDSMITH_ORG)/$($CLOUDSMITH_REPO)" $PackageTarball --version $buildNumber
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cloudsmith portfolio package upload failed with exit code $LASTEXITCODE"
+        }
+        
+        Write-Success "Raw package uploaded to Cloudsmith successfully"
+        
+        # Upload cosign artifacts zip as raw package
+        if (Test-Path $ArtifactsZip) {
+            Write-Host "Uploading cosign artifacts zip..."
+            $artifactsName = "$($PackageName.Replace('@','').Replace('/','-'))-cosign-artifacts"
+
+            $python = "C:\Program Files\Python311\python.exe"
+
+            & $python -m cloudsmith_cli push raw `
+                "$($CLOUDSMITH_ORG)/$($CLOUDSMITH_REPO)" `
+                $ArtifactsZip `
+                --name $artifactsName `
+                --summary "Cosign signatures, certificates, and provenance for $PackageName@$PackageVersion" `
+                --version $buildNumber
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Warning: Failed to upload cosign artifacts zip (exit code $LASTEXITCODE)"
+            } else {
+                Write-Success "Cosign artifacts zip uploaded successfully"
+            }
+        }
+        
+        Write-Success "All artifacts uploaded"
+    }
+    finally {
+        Remove-Item Env:\CLOUDSMITH_API_KEY -ErrorAction SilentlyContinue
+    }
+}
+
+# ===========================
+# Main Execution
+# ===========================
+
+try {
+    Write-Host "======================================"
+    Write-Host "NPM Package Signing and Publishing"
+    Write-Host "======================================`n"
+    
+    # Validate required environment variables
+    if (-not $COSIGN_PRIVATE_KEY) {
+        throw "COSIGN_PRIVATE_KEY environment variable is not set"
+    }
+    
+    if (-not $CLOUDSMITH_API_KEY) {
+        throw "CLOUDSMITH_API_KEY environment variable is not set"
+    }
+    
+    # Install Cosign
+    $cosignPath = Install-Cosign
+    
+    # Get package information
+    $packageInfo = Get-PackageInfo
+    
+    # Find existing package tarball
+    $packageTarball = Find-PackageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    Write-Success "Using package tarball: $packageTarball"
+    
+    # Create provenance
+    $provenanceFile = Create-Provenance -PackageTarball $packageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    # Sign package with Cosign
+    Sign-WithCosign -CosignPath $cosignPath -FilePath $packageTarball
+    
+    # Sign provenance file
+    Sign-WithCosign -CosignPath $cosignPath -FilePath $provenanceFile
+    
+    # Note: Skipping attestation - the 'attest' command is designed for container images, not npm packages
+    # We're already signing both the tarball and provenance file which provides the necessary signatures
+    # Create-Attestation -CosignPath $cosignPath -ProvenanceFile $provenanceFile -PackageTarball $packageTarball
+    
+    # Create zip of all cosign artifacts
+    $artifactsZip = Create-ArtifactsZip -PackageTarball $packageTarball -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    # Upload to Cloudsmith
+    Upload-ToCloudsmith -PackageTarball $packageTarball -ArtifactsZip $artifactsZip -PackageName $packageInfo.Name -PackageVersion $packageInfo.Version
+    
+    Write-Host "`n======================================"
+    Write-Success "Build completed successfully!"
+    Write-Host "======================================`n"
+    
+    exit 0
+}
+catch {
+    Write-Host "`n======================================"
+    Write-Error "Build failed: $_"
+    Write-Host "======================================`n"
+    Write-Host $_
+    exit 1
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Create_Octopus_Build_Infomration" name="Create Octopus Build Information" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# TeamCity build info variables
+$BuildNumber  = "%build.number%"
+$BuildId      = "%teamcity.build.id%"
+$BuildBranch  = "%vcsroot.branch%"
+$CommitSha    = "%build.vcs.number%"
+$RepoUrl      = "%env.BUILD_VCS_URL%"
+$TeamCityUrl  = "%teamcity.url%"
+$PackageId    = "Portfolio"
+$OctoApiKey   = "%env.OCTOPUS_KEY%"
+$OctoServer   = "%env.OCTOPUS_SERVER%"
+
+# Path for the build info JSON file in the checkout directory
+$CheckoutDir   = "%teamcity.build.checkoutDir%"
+$BuildInfoFile = Join-Path $CheckoutDir "buildinfo.octopus"
+
+# Create a simple build info file for Octopus
+$BuildInfo = @{
+    BuildNumber = $BuildNumber
+    BuildId     = $BuildId
+    Branch      = $BuildBranch
+    Commit      = $CommitSha
+    Repository  = $RepoUrl
+    TeamCityUrl = $TeamCityUrl
+} | ConvertTo-Json -Depth 5
+
+$BuildInfo | Set-Content -Path $BuildInfoFile -Encoding UTF8
+Write-Host "✅ Build info written to $BuildInfoFile"
+
+# Prepare Octopus CLI arguments
+$arguments = @(
+    "build-information",
+    "--server=$OctoServer",
+    "--apiKey=$OctoApiKey",
+    "--package-id=$PackageId",
+    "--version=$BuildNumber",
+    "--file=$BuildInfoFile"
+)
+
+# Execute the Octopus CLI command
+Write-Host "🚀 Uploading build information to Octopus Deploy..."
+& octo @arguments]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Create_Octopus_Deplo" name="Create Octopus Deploy Release" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[# TeamCity build info variables
+$BuildNumber  = "%build.number%"
+$BuildBranch  = "%vcsroot.branch%"
+$CommitSha    = "%build.vcs.number%"
+$PackageId    = "Portfolio"
+$OctoApiKey   = "%env.OCTOPUS_KEY%"
+$OctoServer   = "%env.OCTOPUS_SERVER%"
+$ProjectName  = "Portfolio"  # Your Octopus project name
+
+# Create the release
+$createReleaseArgs = @(
+    "create-release",
+    "--server=$OctoServer",
+    "--apiKey=$OctoApiKey",
+    "--project=$ProjectName",
+    "--version=$BuildNumber",
+    "--packageVersion=$BuildNumber",
+    "--releaseNotes=Build: $BuildNumber | Branch: $BuildBranch | Commit: $CommitSha"
+)
+
+Write-Host "📦 Creating release $BuildNumber in Octopus Deploy..."
+& octo @createReleaseArgs
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to create release"
+    exit $LASTEXITCODE
+}
+
+Write-Host "✅ Release $BuildNumber created successfully!"]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="execute_if_failed" />
+        </parameters>
+      </runner>
+      <runner id="Create_Kosli_Environment" name="Create Kosli Environment" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="kosli create environment netlify -t generic" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+    </build-runners>
+    <vcs-settings>
+      <vcs-entry-ref root-id="Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain" />
+    </vcs-settings>
+    <requirements>
+      <equals id="RQ_2" name="npm" value="true" />
+    </requirements>
+    <build-triggers>
+      <build-trigger id="TRIGGER_8" type="vcsTrigger">
+        <parameters>
+          <param name="branchFilter" value="+:*" />
+          <param name="enableQueueOptimization" value="true" />
+          <param name="quietPeriodMode" value="DO_NOT_USE" />
+          <param name="triggerRules" value="-:comment=regex:\[skip ci\]" />
+        </parameters>
+      </build-trigger>
+    </build-triggers>
+    <build-extensions>
+      <extension id="perfmon" type="perfmon">
+        <parameters>
+          <param name="teamcity.perfmon.feature.enabled" value="true" />
+        </parameters>
+      </extension>
+      <extension id="BUILD_EXT_2" type="pullRequests">
+        <parameters>
+          <param name="authenticationType" value="token" />
+          <param name="filterAuthorRole" value="MEMBER" />
+          <param name="filterTargetBranch" value="main" />
+          <param name="providerType" value="github" />
+          <param name="secure:accessToken" value="zxxe48fdb69960388d34d28335b0ad79b3d7e6e6a67deacd0e47f0e9d649c1b5263b30c44649228a8e8775d03cbe80d301b" />
+          <param name="vcsRootId" value="Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain" />
+        </parameters>
+      </extension>
+    </build-extensions>
+  </settings>
+</build-type>
+
