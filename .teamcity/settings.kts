@@ -488,6 +488,19 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Kosli Create Flow"
+            id = "Kosli_Create_Flow"
+            scriptMode = script {
+                content = """
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file kosli/flow-template.yml `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
     }
 
     features {
