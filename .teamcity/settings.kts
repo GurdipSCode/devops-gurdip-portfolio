@@ -247,23 +247,6 @@ object Build : BuildType({
             }
         }
         powerShell {
-            name = "Kosli assert artifact"
-            id = "Kosli_assert_artifact"
-            scriptMode = script {
-                content = """
-                    # Kosli Assert Artifact - run before deployment
-                    ${'$'}ErrorActionPreference = "Stop"
-                    ${'$'}Fingerprint = (kosli fingerprint --artifact-type file ${'$'}ArtifactPath) # or capture from attest output
-                    
-                    kosli assert artifact `
-                      --fingerprint ${'$'}Fingerprint `
-                      --flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
             name = "Set Package/Lock versions"
             id = "Set_Package_Lock_versions"
             scriptMode = script {
