@@ -160,6 +160,39 @@ object Build : BuildType({
             id = "NPM_Build_1"
             scriptContent = "npm i"
         }
+        powerShell {
+            name = "Compute Version"
+            id = "Compute_Version"
+            scriptMode = script {
+                content = """
+                    # Always ensure tags are present locally
+                    git fetch --tags --force | Out-Host
+                    
+                    # Next SemVer computed from commits since last tag (Conventional Commits)
+                    ${'$'}next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+                    
+                    if ([string]::IsNullOrWhiteSpace(${'$'}next)) {
+                      Write-Host "No version bump detected (no unreleased changes)."
+                      exit 0
+                    }
+                    
+                    # TeamCity PR builds expose this parameter (if PR build feature is enabled)
+                    ${'$'}prNumber = "%teamcity.pullRequest.number%"
+                    ${'$'}isPR = ${'$'}prNumber -and ${'$'}prNumber -ne "%teamcity.pullRequest.number%"
+                    
+                    if (${'$'}isPR) {
+                      # PR build: pre-release version, no git tag
+                      ${'$'}version = "${'$'}next-pr.${'$'}prNumber"
+                    } else {
+                      # Main build: release-looking version (we'll actually tag in a later step)
+                      ${'$'}version = "v${'$'}next"
+                    }
+                    
+                    Write-Host "Computed version: ${'$'}version"
+                    Write-Host "##teamcity[buildNumber '${'$'}version']"
+                """.trimIndent()
+            }
+        }
     }
 
     features {
