@@ -234,6 +234,11 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        script {
+            name = "CSpell"
+            id = "CSpell"
+            scriptContent = """npx cspell --config cspell.json "**/*.{js,ts,md,txt}""""
+        }
     }
 
     features {
