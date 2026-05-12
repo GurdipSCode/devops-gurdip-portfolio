@@ -155,6 +155,11 @@ object Build : BuildType({
             id = "NPM_Build"
             scriptContent = "npm run build"
         }
+        script {
+            name = "NPM Build (1)"
+            id = "NPM_Build_1"
+            scriptContent = "npm run build"
+        }
     }
 
     features {
