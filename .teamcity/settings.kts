@@ -247,6 +247,23 @@ object Build : BuildType({
             }
         }
         powerShell {
+            name = "Kosli assert artifact"
+            id = "Kosli_assert_artifact"
+            scriptMode = script {
+                content = """
+                    # Kosli Assert Artifact - run before deployment
+                    ${'$'}ErrorActionPreference = "Stop"
+                    ${'$'}Fingerprint = (kosli fingerprint --artifact-type file ${'$'}ArtifactPath) # or capture from attest output
+                    
+                    kosli assert artifact `
+                      --fingerprint ${'$'}Fingerprint `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
+        powerShell {
             name = "Set Package/Lock versions"
             id = "Set_Package_Lock_versions"
             scriptMode = script {
@@ -319,6 +336,11 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        script {
+            name = "Run Sonar Scan"
+            id = "Run_Sonar_Scan"
+            scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
+        }
         powerShell {
             name = "Kosli Create Flow"
             id = "Kosli_Create_Flow"
@@ -374,26 +396,56 @@ object Build : BuildType({
             }
         }
         powerShell {
-            name = "Kosli assert artifact"
-            id = "Kosli_assert_artifact"
+            name = "Kosli Attest Artifact"
+            id = "Kosli_Attest_Artifact"
             scriptMode = script {
                 content = """
-                    # Kosli Assert Artifact - run before deployment
+                    # Kosli Attest Artifact - TeamCity Build Step
+                    Write-Host "Starting Kosli Attest Artifact..."
                     ${'$'}ErrorActionPreference = "Stop"
-                    ${'$'}Fingerprint = (kosli fingerprint --artifact-type file ${'$'}ArtifactPath) # or capture from attest output
                     
-                    kosli assert artifact `
-                      --fingerprint ${'$'}Fingerprint `
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
+                    
+                    # Path to the packaged artifact produced by the "Package Dist Folder" step
+                    # Adjust this to wherever step 15 actually writes its output
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Trail (commit): ${'$'}TrailName"
+                    
+                    # Verify the artifact actually exists before attesting
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
+                    
+                    # Attest the artifact to Kosli
+                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
+                    kosli attest artifact ${'$'}ArtifactPath `
+                      --artifact-type file `
+                      --name ${'$'}ArtifactName `
                       --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
                       --org ${'$'}KosliOrg `
+                      --commit ${'$'}TrailName `
+                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
                       --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
+                    }
+                    
+                    Write-
                 """.trimIndent()
             }
-        }
-        script {
-            name = "Run Sonar Scan"
-            id = "Run_Sonar_Scan"
-            scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
         }
         powerShell {
             name = "Kosli attest sonar"
@@ -570,58 +622,6 @@ object Build : BuildType({
                         Write-Host ${'$'}_.ScriptStackTrace
                         exit 1
                     }
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli Attest Artifact"
-            id = "Kosli_Attest_Artifact"
-            scriptMode = script {
-                content = """
-                    # Kosli Attest Artifact - TeamCity Build Step
-                    Write-Host "Starting Kosli Attest Artifact..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg     = "gurdipdevops"
-                    ${'$'}FlowName     = "portfolio-flow"
-                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
-                    
-                    # Path to the packaged artifact produced by the "Package Dist Folder" step
-                    # Adjust this to wherever step 15 actually writes its output
-                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
-                    
-                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
-                    ${'$'}TrailName = git rev-parse HEAD
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
-                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
-                    }
-                    Write-Host "Trail (commit): ${'$'}TrailName"
-                    
-                    # Verify the artifact actually exists before attesting
-                    if (-not (Test-Path ${'$'}ArtifactPath)) {
-                        throw "Artifact not found at: ${'$'}ArtifactPath"
-                    }
-                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
-                    
-                    # Attest the artifact to Kosli
-                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
-                    kosli attest artifact ${'$'}ArtifactPath `
-                      --artifact-type file `
-                      --name ${'$'}ArtifactName `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --commit ${'$'}TrailName `
-                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
-                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    if (${'$'}LASTEXITCODE -ne 0) {
-                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
-                    }
-                    
-                    Write-
                 """.trimIndent()
             }
         }
