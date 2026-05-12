@@ -516,6 +516,7 @@ object Build : BuildType({
             }
         }
         powerShell {
+            name = "Kosli Begin Trail"
             id = "jetbrains_powershell_1"
             scriptMode = script {
                 content = """
