@@ -50,11 +50,6 @@ object Build : BuildType({
     }
 
     steps {
-        script {
-            name = "NPM Build"
-            id = "NPM_Build"
-            scriptContent = "npm run build"
-        }
         powerShell {
             name = "Create Artifact Dirs"
             id = "Create_Artifact_Dirs"
@@ -154,6 +149,11 @@ object Build : BuildType({
                     return ${'$'}result
                 """.trimIndent()
             }
+        }
+        script {
+            name = "NPM Build"
+            id = "NPM_Build"
+            scriptContent = "npm run build"
         }
     }
 
