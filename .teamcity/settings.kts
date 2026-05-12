@@ -625,6 +625,56 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Kosli assert artifact (1)"
+            id = "Kosli_assert_artifact_1"
+            scriptMode = script {
+                content = """
+                    # Kosli Assert Artifact - TeamCity Build Step
+                    # Runs as the final gate before Octopus Deploy
+                    Write-Host "Starting Kosli Assert Artifact..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    
+                    # Path to the packaged artifact - must match the path used in Kosli Attest Artifact
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Verify the artifact exists
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    
+                    # Compute the artifact's SHA256 fingerprint
+                    # This must match the fingerprint Kosli calculated when we attested the artifact
+                    Write-Host "Computing fingerprint for: ${'$'}ArtifactPath"
+                    ${'$'}Fingerprint = kosli fingerprint ${'$'}ArtifactPath --artifact-type file --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}Fingerprint) {
+                        throw "Failed to compute artifact fingerprint"
+                    }
+                    ${'$'}Fingerprint = ${'$'}Fingerprint.Trim()
+                    Write-Host "Artifact fingerprint: ${'$'}Fingerprint"
+                    
+                    # Assert the artifact is compliant with the flow's template
+                    # Exits non-zero if any required attestation is missing or non-compliant
+                    Write-Host "Asserting artifact compliance against flow: ${'$'}FlowName"
+                    kosli assert artifact `
+                      --fingerprint ${'$'}Fingerprint `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "Kosli assert artifact FAILED - artifact is not compliant. Deployment blocked."
+                    }
+                    
+                    Write-Host "Kosli Assert Artifact PASSED - artifact is compliant. Proceeding to deploy."
+                """.trimIndent()
+            }
+        }
     }
 
     features {
