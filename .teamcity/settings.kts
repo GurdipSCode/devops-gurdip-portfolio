@@ -246,6 +246,79 @@ object Build : BuildType({
                 content = """Copy-Item -Path "package.json" -Destination "dist/package.json" -Force"""
             }
         }
+        powerShell {
+            name = "Set Package/Lock versions"
+            id = "Set_Package_Lock_versions"
+            scriptMode = script {
+                content = """
+                    param(
+                        [Parameter(Mandatory=${'$'}true)]
+                        [string]${'$'}Version
+                    )
+                    
+                    Write-Host "Updating package files to version: ${'$'}Version" -ForegroundColor Cyan
+                    
+                    function Update-JsonVersion {
+                        param(
+                            [string]${'$'}FilePath,
+                            [string]${'$'}Version
+                        )
+                        
+                        if (-not (Test-Path ${'$'}FilePath)) {
+                            Write-Warning "${'$'}FilePath not found, skipping..."
+                            return ${'$'}false
+                        }
+                        
+                        Write-Host "Updating ${'$'}FilePath..." -ForegroundColor Cyan
+                        
+                        try {
+                            ${'$'}content = Get-Content ${'$'}FilePath -Raw
+                            ${'$'}pattern = '("version"\s*:\s*)"[^"]*"'
+                            ${'$'}replacement = "`${'$'}1`"${'$'}Version`""
+                            
+                            if (${'$'}content -match ${'$'}pattern) {
+                                ${'$'}newContent = ${'$'}content -replace ${'$'}pattern, ${'$'}replacement
+                                Set-Content -Path ${'$'}FilePath -Value ${'$'}newContent -NoNewline -Encoding UTF8
+                                Write-Host "Successfully updated ${'$'}FilePath" -ForegroundColor Green
+                                return ${'$'}true
+                            }
+                            else {
+                                Write-Warning "Could not find version field in ${'$'}FilePath"
+                                return ${'$'}false
+                            }
+                        }
+                        catch {
+                            Write-Error "Failed to update ${'$'}{FilePath}: ${'$'}(${'$'}_.Exception.Message)"
+                            return ${'$'}false
+                        }
+                    }
+                    
+                    # Update all files
+                    ${'$'}packageJsonUpdated = Update-JsonVersion -FilePath "package.json" -Version ${'$'}Version
+                    ${'$'}packageLockUpdated = Update-JsonVersion -FilePath "package-lock.json" -Version ${'$'}Version
+                    ${'$'}distPackageJsonUpdated = Update-JsonVersion -FilePath "dist/package.json" -Version ${'$'}Version
+                    
+                    # Summary
+                    Write-Host "`n========================================" -ForegroundColor Cyan
+                    Write-Host "Version Update Summary" -ForegroundColor Cyan
+                    Write-Host "========================================" -ForegroundColor Cyan
+                    Write-Host "Version: ${'$'}Version" -ForegroundColor Yellow
+                    Write-Host "package.json: ${'$'}(if(${'$'}packageJsonUpdated){'Updated'}else{'Failed'})" -ForegroundColor ${'$'}(if(${'$'}packageJsonUpdated){'Green'}else{'Red'})
+                    Write-Host "package-lock.json: ${'$'}(if(${'$'}packageLockUpdated){'Updated'}else{'Failed'})" -ForegroundColor ${'$'}(if(${'$'}packageLockUpdated){'Green'}else{'Red'})
+                    Write-Host "dist/package.json: ${'$'}(if(${'$'}distPackageJsonUpdated){'Updated'}else{'Failed'})" -ForegroundColor ${'$'}(if(${'$'}distPackageJsonUpdated){'Green'}else{'Red'})
+                    Write-Host "========================================`n" -ForegroundColor Cyan
+                    
+                    # Exit with error if any update failed
+                    if (-not ${'$'}packageJsonUpdated -or -not ${'$'}packageLockUpdated -or -not ${'$'}distPackageJsonUpdated) {
+                        Write-Error "One or more package files failed to update"
+                        exit 1
+                    }
+                    
+                    Write-Host "All package files updated successfully!" -ForegroundColor Green
+                    exit 0
+                """.trimIndent()
+            }
+        }
     }
 
     features {
