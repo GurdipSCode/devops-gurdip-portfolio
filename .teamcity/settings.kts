@@ -193,6 +193,22 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Generate Changelog"
+            id = "jetbrains_powershell"
+            scriptMode = script {
+                content = """
+                    git fetch --tags --force | Out-Host
+                    
+                    ${'$'}next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+                    if ([string]::IsNullOrWhiteSpace(${'$'}next)) { exit 0 }
+                    
+                    # Create release notes using the version label we computed
+                    git cliff --config cliff.toml --unreleased --tag "v${'$'}next" -o CHANGELOG.md
+                    Write-Host "Generated CHANGELOG.md for v${'$'}next"
+                """.trimIndent()
+            }
+        }
     }
 
     features {
