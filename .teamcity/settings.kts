@@ -501,6 +501,46 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            id = "jetbrains_powershell_1"
+            scriptMode = script {
+                content = """
+                    # Kosli Begin Trail - TeamCity Build Step
+                    Write-Host "Starting Kosli Begin Trail..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg        = "gurdipdevops"
+                    ${'$'}FlowName        = "portfolio-flow"
+                    ${'$'}FlowDescription = "Flow for governance attestation"
+                    ${'$'}TemplateFile    = "kosli/flow-template.yml"
+                    
+                    # Get the git commit SHA to use as the trail name
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Using trail name: ${'$'}TrailName"
+                    
+                    # Create or update the flow (idempotent)
+                    Write-Host "Creating/updating Kosli flow: ${'$'}FlowName..."
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file ${'$'}TemplateFile `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    # Begin the trail
+                    kosli begin trail ${'$'}TrailName `
+                      --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    Write-Host "Kosli Begin Trail completed successfully."
+                """.trimIndent()
+            }
+        }
     }
 
     features {
