@@ -541,6 +541,20 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Kosli attest sonar"
+            id = "Kosli_attest_sonar"
+            scriptMode = script {
+                content = """
+                    kosli attest sonar `
+                      --name portfolio.security-scan `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
     }
 
     features {
