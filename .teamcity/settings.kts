@@ -156,9 +156,9 @@ object Build : BuildType({
             scriptContent = "npm run build"
         }
         script {
-            name = "NPM Build (1)"
+            name = "NPM Install"
             id = "NPM_Build_1"
-            scriptContent = "npm run build"
+            scriptContent = "npm i"
         }
     }
 
