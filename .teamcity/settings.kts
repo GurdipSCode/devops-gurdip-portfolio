@@ -342,6 +342,152 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Package Dist Folder"
+            id = "Package_Dist_Folder"
+            scriptMode = script {
+                content = """
+                    # ===========================
+                    # Configuration Variables
+                    # ===========================
+                    
+                    ${'$'}DIST_FOLDER = "dist"
+                    ${'$'}OUTPUT_FOLDER = "artifacts/publish"
+                    ${'$'}PACKAGE_NAME = "Portfolio"
+                    
+                    # ===========================
+                    # Error Handling
+                    # ===========================
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # ===========================
+                    # Functions
+                    # ===========================
+                    
+                    function Write-Step {
+                        param([string]${'$'}Message)
+                        Write-Host "`n##teamcity[progressMessage '${'$'}Message']"
+                        Write-Host "===> ${'$'}Message" -ForegroundColor Cyan
+                    }
+                    
+                    function Write-Success {
+                        param([string]${'$'}Message)
+                        Write-Host "✓ ${'$'}Message" -ForegroundColor Green
+                    }
+                    
+                    function Write-Error {
+                        param([string]${'$'}Message)
+                        Write-Host "✗ ${'$'}Message" -ForegroundColor Red
+                    }
+                    
+                    # ===========================
+                    # Main Execution
+                    # ===========================
+                    
+                    try {
+                        Write-Host "======================================"
+                        Write-Host "NPM Package Creation"
+                        Write-Host "======================================`n"
+                        
+                        # Verify dist folder exists
+                        if (-not (Test-Path ${'$'}DIST_FOLDER)) {
+                            throw "Dist folder not found: ${'$'}DIST_FOLDER"
+                        }
+                        
+                        Write-Success "Dist folder found: ${'$'}DIST_FOLDER"
+                        
+                        # Create output folder if it doesn't exist
+                        Write-Step "Creating output folder"
+                        if (-not (Test-Path ${'$'}OUTPUT_FOLDER)) {
+                            New-Item -ItemType Directory -Path ${'$'}OUTPUT_FOLDER -Force | Out-Null
+                            Write-Success "Created: ${'$'}OUTPUT_FOLDER"
+                        } else {
+                            Write-Success "Output folder exists: ${'$'}OUTPUT_FOLDER"
+                        }
+                        
+                        # Pack the npm package
+                        Write-Step "Packing npm package"
+                        
+                        Push-Location ${'$'}DIST_FOLDER
+                        try {
+                            # Read package.json to get version
+                            ${'$'}packageJsonPath = "package.json"
+                            if (-not (Test-Path ${'$'}packageJsonPath)) {
+                                throw "package.json not found in ${'$'}DIST_FOLDER"
+                            }
+                            
+                            ${'$'}packageJson = Get-Content ${'$'}packageJsonPath -Raw | ConvertFrom-Json
+                            ${'$'}version = ${'$'}packageJson.version
+                            
+                            Write-Host "Package version: ${'$'}version"
+                            
+                            # Pack the package
+                            npm pack
+                            
+                            if (${'$'}LASTEXITCODE -ne 0) {
+                                throw "npm pack failed with exit code ${'$'}LASTEXITCODE"
+                            }
+                            
+                            # Find the created tarball
+                            ${'$'}tarball = Get-ChildItem -Filter "*.tgz" | Select-Object -First 1
+                            
+                            if (-not ${'$'}tarball) {
+                                throw "No .tgz file found after npm pack"
+                            }
+                            
+                            Write-Success "Package created: ${'$'}(${'$'}tarball.Name)"
+                            
+                            # Create new filename with version
+                            ${'$'}newFileName = "${'$'}PACKAGE_NAME-${'$'}version.tgz"
+                            
+                            Write-Step "Renaming package to: ${'$'}newFileName"
+                            
+                            ${'$'}destination = Join-Path (Resolve-Path "..") ${'$'}OUTPUT_FOLDER
+                            ${'$'}destinationFile = Join-Path ${'$'}destination ${'$'}newFileName
+                            
+                            # Remove existing file if present
+                            if (Test-Path ${'$'}destinationFile) {
+                                Remove-Item ${'$'}destinationFile -Force
+                                Write-Host "Removed existing file: ${'$'}newFileName"
+                            }
+                            
+                            # Rename and move
+                            Rename-Item ${'$'}tarball.FullName ${'$'}newFileName
+                            ${'$'}renamedTarball = Get-Item ${'$'}newFileName
+                            Move-Item ${'$'}renamedTarball.FullName ${'$'}destination -Force
+                            
+                            Write-Success "Moved to: ${'$'}destinationFile"
+                            
+                            # Verify the file exists in destination
+                            if (Test-Path ${'$'}destinationFile) {
+                                ${'$'}fileInfo = Get-Item ${'$'}destinationFile
+                                Write-Host "`nPackage Details:"
+                                Write-Host "  Name: ${'$'}(${'$'}fileInfo.Name)"
+                                Write-Host "  Size: ${'$'}([math]::Round(${'$'}fileInfo.Length / 1KB, 2)) KB"
+                                Write-Host "  Path: ${'$'}(${'$'}fileInfo.FullName)"
+                            }
+                            
+                        }
+                        finally {
+                            Pop-Location
+                        }
+                        
+                        Write-Host "`n======================================"
+                        Write-Success "Package creation completed successfully!"
+                        Write-Host "======================================`n"
+                        
+                        exit 0
+                    }
+                    catch {
+                        Write-Host "`n======================================"
+                        Write-Error "Package creation failed: ${'$'}_"
+                        Write-Host "======================================`n"
+                        Write-Host ${'$'}_.ScriptStackTrace
+                        exit 1
+                    }
+                """.trimIndent()
+            }
+        }
     }
 
     features {
