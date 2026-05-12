@@ -319,6 +319,11 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        script {
+            name = "Run Sonar Scan"
+            id = "Run_Sonar_Scan"
+            scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
+        }
     }
 
     features {
