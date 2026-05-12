@@ -209,6 +209,31 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Tag Release"
+            id = "Tag_Release"
+            scriptMode = script {
+                content = """
+                    git fetch --tags --force | Out-Host
+                    
+                    ${'$'}next = (& git cliff --config cliff.toml --unreleased --bumped-version).Trim()
+                    if ([string]::IsNullOrWhiteSpace(${'$'}next)) { exit 0 }
+                    
+                    ${'$'}tag = "v${'$'}next"
+                    
+                    # Safety: don't re-tag if it already exists
+                    ${'$'}existing = git tag -l ${'$'}tag
+                    if (${'$'}existing) {
+                      Write-Host "Tag ${'$'}tag already exists. Skipping."
+                      exit 0
+                    }
+                    
+                    git tag ${'$'}tag
+                    git push origin ${'$'}tag
+                    Write-Host "Created and pushed tag ${'$'}tag"
+                """.trimIndent()
+            }
+        }
     }
 
     features {
