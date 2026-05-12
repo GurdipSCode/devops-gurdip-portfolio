@@ -324,6 +324,24 @@ object Build : BuildType({
             id = "Run_Sonar_Scan"
             scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
         }
+        powerShell {
+            name = "Execute GitGuardian"
+            id = "Execut"
+            scriptMode = script {
+                content = """
+                    # Ensure the GitGuardian directory exists
+                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
+                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
+                    }
+                    
+                    # Run the scan, prettify JSON, and save to SARIF file
+                    ggshield secret scan commit-range HEAD~1 --format sarif |
+                        ConvertFrom-Json |
+                        ConvertTo-Json -Depth 10 |
+                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
+                """.trimIndent()
+            }
+        }
     }
 
     features {
