@@ -325,144 +325,6 @@ object Build : BuildType({
             scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
         }
         powerShell {
-            name = "Kosli Create Flow"
-            id = "Kosli_Create_Flow"
-            scriptMode = script {
-                content = """
-                    kosli create flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --description ${'$'}FlowDescription `
-                      --template-file kosli/flow-template.yml `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli Begin Trail"
-            id = "jetbrains_powershell_1"
-            scriptMode = script {
-                content = """
-                    # Kosli Begin Trail - TeamCity Build Step
-                    Write-Host "Starting Kosli Begin Trail..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg        = "gurdipdevops"
-                    ${'$'}FlowName        = "portfolio-flow"
-                    ${'$'}FlowDescription = "Flow for governance attestation"
-                    ${'$'}TemplateFile    = "kosli/flow-template.yml"
-                    
-                    # Get the git commit SHA to use as the trail name
-                    ${'$'}TrailName = git rev-parse HEAD
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
-                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
-                    }
-                    Write-Host "Using trail name: ${'$'}TrailName"
-                    
-                    # Create or update the flow (idempotent)
-                    Write-Host "Creating/updating Kosli flow: ${'$'}FlowName..."
-                    kosli create flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --description ${'$'}FlowDescription `
-                      --template-file ${'$'}TemplateFile `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    # Begin the trail
-                    kosli begin trail ${'$'}TrailName `
-                      --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
-                      --flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    Write-Host "Kosli Begin Trail completed successfully."
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli Attest Artifact"
-            id = "Kosli_Attest_Artifact"
-            scriptMode = script {
-                content = """
-                    # Kosli Attest Artifact - TeamCity Build Step
-                    Write-Host "Starting Kosli Attest Artifact..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg     = "gurdipdevops"
-                    ${'$'}FlowName     = "portfolio-flow"
-                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
-                    
-                    # Path to the packaged artifact produced by the "Package Dist Folder" step
-                    # Adjust this to wherever step 15 actually writes its output
-                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
-                    
-                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
-                    ${'$'}TrailName = git rev-parse HEAD
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
-                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
-                    }
-                    Write-Host "Trail (commit): ${'$'}TrailName"
-                    
-                    # Verify the artifact actually exists before attesting
-                    if (-not (Test-Path ${'$'}ArtifactPath)) {
-                        throw "Artifact not found at: ${'$'}ArtifactPath"
-                    }
-                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
-                    
-                    # Attest the artifact to Kosli
-                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
-                    kosli attest artifact ${'$'}ArtifactPath `
-                      --artifact-type file `
-                      --name ${'$'}ArtifactName `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --commit ${'$'}TrailName `
-                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
-                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    if (${'$'}LASTEXITCODE -ne 0) {
-                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
-                    }
-                    
-                    Write-
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli attest sonar"
-            id = "Kosli_attest_sonar"
-            scriptMode = script {
-                content = """
-                    kosli attest sonar `
-                      --name portfolio.security-scan `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Execute GitGuardian"
-            id = "Execut"
-            scriptMode = script {
-                content = """
-                    # Ensure the GitGuardian directory exists
-                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
-                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
-                    }
-                    
-                    # Run the scan, prettify JSON, and save to SARIF file
-                    ggshield secret scan commit-range HEAD~1 --format sarif |
-                        ConvertFrom-Json |
-                        ConvertTo-Json -Depth 10 |
-                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
-                """.trimIndent()
-            }
-        }
-        powerShell {
             name = "Package Dist Folder"
             id = "Package_Dist_Folder"
             scriptMode = script {
@@ -605,6 +467,144 @@ object Build : BuildType({
                         Write-Host ${'$'}_.ScriptStackTrace
                         exit 1
                     }
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Create Flow"
+            id = "Kosli_Create_Flow"
+            scriptMode = script {
+                content = """
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file kosli/flow-template.yml `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Begin Trail"
+            id = "jetbrains_powershell_1"
+            scriptMode = script {
+                content = """
+                    # Kosli Begin Trail - TeamCity Build Step
+                    Write-Host "Starting Kosli Begin Trail..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg        = "gurdipdevops"
+                    ${'$'}FlowName        = "portfolio-flow"
+                    ${'$'}FlowDescription = "Flow for governance attestation"
+                    ${'$'}TemplateFile    = "kosli/flow-template.yml"
+                    
+                    # Get the git commit SHA to use as the trail name
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Using trail name: ${'$'}TrailName"
+                    
+                    # Create or update the flow (idempotent)
+                    Write-Host "Creating/updating Kosli flow: ${'$'}FlowName..."
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file ${'$'}TemplateFile `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    # Begin the trail
+                    kosli begin trail ${'$'}TrailName `
+                      --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    Write-Host "Kosli Begin Trail completed successfully."
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Attest Artifact"
+            id = "Kosli_Attest_Artifact"
+            scriptMode = script {
+                content = """
+                    # Kosli Attest Artifact - TeamCity Build Step
+                    Write-Host "Starting Kosli Attest Artifact..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
+                    
+                    # Path to the packaged artifact produced by the "Package Dist Folder" step
+                    # Adjust this to wherever step 15 actually writes its output
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Trail (commit): ${'$'}TrailName"
+                    
+                    # Verify the artifact actually exists before attesting
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
+                    
+                    # Attest the artifact to Kosli
+                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
+                    kosli attest artifact ${'$'}ArtifactPath `
+                      --artifact-type file `
+                      --name ${'$'}ArtifactName `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --commit ${'$'}TrailName `
+                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
+                    }
+                    
+                    Write-
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli attest sonar"
+            id = "Kosli_attest_sonar"
+            scriptMode = script {
+                content = """
+                    kosli attest sonar `
+                      --name portfolio.security-scan `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Execute GitGuardian"
+            id = "Execut"
+            scriptMode = script {
+                content = """
+                    # Ensure the GitGuardian directory exists
+                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
+                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
+                    }
+                    
+                    # Run the scan, prettify JSON, and save to SARIF file
+                    ggshield secret scan commit-range HEAD~1 --format sarif |
+                        ConvertFrom-Json |
+                        ConvertTo-Json -Depth 10 |
+                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
                 """.trimIndent()
             }
         }
