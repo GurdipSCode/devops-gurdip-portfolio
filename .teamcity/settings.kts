@@ -319,10 +319,37 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Kosli Create Flow"
+            id = "Kosli_Create_Flow"
+            scriptMode = script {
+                content = """
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file kosli/flow-template.yml `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
         script {
             name = "Run Sonar Scan"
             id = "Run_Sonar_Scan"
             scriptContent = "node sonar.js  --kosli_flow=portfolio-flow --kosli_trail=Portfolio-trail-%build.number% --kosli_fingerprint=abc123 --attestation=differ.sonarcloud-scan"
+        }
+        powerShell {
+            name = "Kosli attest sonar"
+            id = "Kosli_attest_sonar"
+            scriptMode = script {
+                content = """
+                    kosli attest sonar `
+                      --name portfolio.security-scan `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
         }
         powerShell {
             name = "Execute GitGuardian"
@@ -489,19 +516,6 @@ object Build : BuildType({
             }
         }
         powerShell {
-            name = "Kosli Create Flow"
-            id = "Kosli_Create_Flow"
-            scriptMode = script {
-                content = """
-                    kosli create flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --description ${'$'}FlowDescription `
-                      --template-file kosli/flow-template.yml `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
             id = "jetbrains_powershell_1"
             scriptMode = script {
                 content = """
@@ -538,20 +552,6 @@ object Build : BuildType({
                       --api-token %env.KOSLI_KEY%
                     
                     Write-Host "Kosli Begin Trail completed successfully."
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli attest sonar"
-            id = "Kosli_attest_sonar"
-            scriptMode = script {
-                content = """
-                    kosli attest sonar `
-                      --name portfolio.security-scan `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
                 """.trimIndent()
             }
         }
