@@ -239,6 +239,13 @@ object Build : BuildType({
             id = "CSpell"
             scriptContent = """npx cspell --config cspell.json "**/*.{js,ts,md,txt}""""
         }
+        powerShell {
+            name = "Copy package.json to dist"
+            id = "Copy_package_json_to_dist"
+            scriptMode = script {
+                content = """Copy-Item -Path "package.json" -Destination "dist/package.json" -Force"""
+            }
+        }
     }
 
     features {
