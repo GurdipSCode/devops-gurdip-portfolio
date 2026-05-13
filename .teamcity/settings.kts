@@ -30,6 +30,7 @@ version = "2026.1"
 
 project {
 
+    buildType(Semgrep)
     buildType(Build)
 
     features {
@@ -663,5 +664,13 @@ object Build : BuildType({
     features {
         perfmon {
         }
+    }
+})
+
+object Semgrep : BuildType({
+    name = "Semgrep"
+
+    vcs {
+        root(DslContext.settingsRoot)
     }
 })
