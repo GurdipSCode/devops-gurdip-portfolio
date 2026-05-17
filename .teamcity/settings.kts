@@ -667,7 +667,7 @@ object Build : BuildType({
     }
 
     requirements {
-        exists("system.npm.version")
+        contains("env.Path", "nodejs")
     }
 })
 
