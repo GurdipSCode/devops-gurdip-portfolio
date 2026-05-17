@@ -665,6 +665,10 @@ object Build : BuildType({
         perfmon {
         }
     }
+
+    requirements {
+        exists("system.npm.version")
+    }
 })
 
 object Semgrep : BuildType({
