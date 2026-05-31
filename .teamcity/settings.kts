@@ -659,6 +659,24 @@ object Build : BuildType({
                 """.trimIndent()
             }
         }
+        powerShell {
+            name = "Execute GitGuardian (1)"
+            id = "Exec"
+            scriptMode = script {
+                content = """
+                    # Ensure the GitGuardian directory exists
+                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
+                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
+                    }
+                    
+                    # Run the scan, prettify JSON, and save to SARIF file
+                    ggshield secret scan commit-range HEAD~1 --format sarif |
+                        ConvertFrom-Json |
+                        ConvertTo-Json -Depth 10 |
+                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
+                """.trimIndent()
+            }
+        }
     }
 
     features {
