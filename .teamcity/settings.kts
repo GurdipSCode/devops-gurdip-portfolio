@@ -46,6 +46,10 @@ project {
 object Build : BuildType({
     name = "Build"
 
+    params {
+        param("teamcity.pullRequest.number", "")
+    }
+
     vcs {
         root(DslContext.settingsRoot)
     }
