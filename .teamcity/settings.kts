@@ -1185,6 +1185,7 @@ object Build : BuildType({
 
     triggers {
         vcs {
+            triggerRules = "-:user=teamcity-agent"
             branchFilter = ""
             enableQueueOptimization = false
         }
