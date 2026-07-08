@@ -476,194 +476,6 @@ object Build : BuildType({
             }
         }
         powerShell {
-            name = "Kosli Create Flow"
-            id = "Kosli_Create_Flow"
-            scriptMode = script {
-                content = """
-                    kosli create flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --description ${'$'}FlowDescription `
-                      --template-file kosli/flow-template.yml `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli Begin Trail"
-            id = "jetbrains_powershell_1"
-            scriptMode = script {
-                content = """
-                    # Kosli Begin Trail - TeamCity Build Step
-                    Write-Host "Starting Kosli Begin Trail..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg        = "gurdipdevops"
-                    ${'$'}FlowName        = "portfolio-flow"
-                    ${'$'}FlowDescription = "Flow for governance attestation"
-                    ${'$'}TemplateFile    = "kosli/flow-template.yml"
-                    
-                    # Get the git commit SHA to use as the trail name
-                    ${'$'}TrailName = git rev-parse HEAD
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
-                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
-                    }
-                    Write-Host "Using trail name: ${'$'}TrailName"
-                    
-                    # Create or update the flow (idempotent)
-                    Write-Host "Creating/updating Kosli flow: ${'$'}FlowName..."
-                    kosli create flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --description ${'$'}FlowDescription `
-                      --template-file ${'$'}TemplateFile `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    # Begin the trail
-                    kosli begin trail ${'$'}TrailName `
-                      --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
-                      --flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    Write-Host "Kosli Begin Trail completed successfully."
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli Attest Artifact"
-            id = "Kosli_Attest_Artifact"
-            scriptMode = script {
-                content = """
-                    # Kosli Attest Artifact - TeamCity Build Step
-                    Write-Host "Starting Kosli Attest Artifact..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg     = "gurdipdevops"
-                    ${'$'}FlowName     = "portfolio-flow"
-                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
-                    
-                    # Path to the packaged artifact produced by the "Package Dist Folder" step
-                    # Adjust this to wherever step 15 actually writes its output
-                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
-                    
-                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
-                    ${'$'}TrailName = git rev-parse HEAD
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
-                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
-                    }
-                    Write-Host "Trail (commit): ${'$'}TrailName"
-                    
-                    # Verify the artifact actually exists before attesting
-                    if (-not (Test-Path ${'$'}ArtifactPath)) {
-                        throw "Artifact not found at: ${'$'}ArtifactPath"
-                    }
-                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
-                    
-                    # Attest the artifact to Kosli
-                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
-                    kosli attest artifact ${'$'}ArtifactPath `
-                      --artifact-type file `
-                      --name ${'$'}ArtifactName `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --commit ${'$'}TrailName `
-                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
-                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    if (${'$'}LASTEXITCODE -ne 0) {
-                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
-                    }
-                    
-                    Write-
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli attest sonar"
-            id = "Kosli_attest_sonar"
-            scriptMode = script {
-                content = """
-                    kosli attest sonar `
-                      --name portfolio.security-scan `
-                      --flow ${'$'}FlowName `
-                      --trail ${'$'}TrailName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Execute GitGuardian"
-            id = "Execut"
-            scriptMode = script {
-                content = """
-                    # Ensure the GitGuardian directory exists
-                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
-                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
-                    }
-                    
-                    # Run the scan, prettify JSON, and save to SARIF file
-                    ggshield secret scan commit-range HEAD~1 --format sarif |
-                        ConvertFrom-Json |
-                        ConvertTo-Json -Depth 10 |
-                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
-                """.trimIndent()
-            }
-        }
-        powerShell {
-            name = "Kosli assert artifact (1)"
-            id = "Kosli_assert_artifact_1"
-            scriptMode = script {
-                content = """
-                    # Kosli Assert Artifact - TeamCity Build Step
-                    # Runs as the final gate before Octopus Deploy
-                    Write-Host "Starting Kosli Assert Artifact..."
-                    ${'$'}ErrorActionPreference = "Stop"
-                    
-                    # CONFIGURATION
-                    ${'$'}KosliOrg     = "gurdipdevops"
-                    ${'$'}FlowName     = "portfolio-flow"
-                    
-                    # Path to the packaged artifact - must match the path used in Kosli Attest Artifact
-                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
-                    
-                    # Verify the artifact exists
-                    if (-not (Test-Path ${'$'}ArtifactPath)) {
-                        throw "Artifact not found at: ${'$'}ArtifactPath"
-                    }
-                    
-                    # Compute the artifact's SHA256 fingerprint
-                    # This must match the fingerprint Kosli calculated when we attested the artifact
-                    Write-Host "Computing fingerprint for: ${'$'}ArtifactPath"
-                    ${'$'}Fingerprint = kosli fingerprint ${'$'}ArtifactPath --artifact-type file --api-token %env.KOSLI_KEY%
-                    
-                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}Fingerprint) {
-                        throw "Failed to compute artifact fingerprint"
-                    }
-                    ${'$'}Fingerprint = ${'$'}Fingerprint.Trim()
-                    Write-Host "Artifact fingerprint: ${'$'}Fingerprint"
-                    
-                    # Assert the artifact is compliant with the flow's template
-                    # Exits non-zero if any required attestation is missing or non-compliant
-                    Write-Host "Asserting artifact compliance against flow: ${'$'}FlowName"
-                    kosli assert artifact `
-                      --fingerprint ${'$'}Fingerprint `
-                      --flow ${'$'}FlowName `
-                      --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
-                    
-                    if (${'$'}LASTEXITCODE -ne 0) {
-                        throw "Kosli assert artifact FAILED - artifact is not compliant. Deployment blocked."
-                    }
-                    
-                    Write-Host "Kosli Assert Artifact PASSED - artifact is compliant. Proceeding to deploy."
-                """.trimIndent()
-            }
-        }
-        powerShell {
             name = "Sign package with Cosign"
             id = "Sign_package_with_Cosign"
             scriptMode = script {
@@ -954,6 +766,417 @@ object Build : BuildType({
                     }
                     
                     return ${'$'}result
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Create Flow"
+            id = "Kosli_Create_Flow"
+            scriptMode = script {
+                content = """
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file kosli/flow-template.yml `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Begin Trail"
+            id = "jetbrains_powershell_1"
+            scriptMode = script {
+                content = """
+                    # Kosli Begin Trail - TeamCity Build Step
+                    Write-Host "Starting Kosli Begin Trail..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg        = "gurdipdevops"
+                    ${'$'}FlowName        = "portfolio-flow"
+                    ${'$'}FlowDescription = "Flow for governance attestation"
+                    ${'$'}TemplateFile    = "kosli/flow-template.yml"
+                    
+                    # Get the git commit SHA to use as the trail name
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Using trail name: ${'$'}TrailName"
+                    
+                    # Create or update the flow (idempotent)
+                    Write-Host "Creating/updating Kosli flow: ${'$'}FlowName..."
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file ${'$'}TemplateFile `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    # Begin the trail
+                    kosli begin trail ${'$'}TrailName `
+                      --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    Write-Host "Kosli Begin Trail completed successfully."
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli Attest Artifact"
+            id = "Kosli_Attest_Artifact"
+            scriptMode = script {
+                content = """
+                    # Kosli Attest Artifact - TeamCity Build Step
+                    Write-Host "Starting Kosli Attest Artifact..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
+                    
+                    # Path to the packaged artifact produced by the "Package Dist Folder" step
+                    # Adjust this to wherever step 15 actually writes its output
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Trail (commit): ${'$'}TrailName"
+                    
+                    # Verify the artifact actually exists before attesting
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
+                    
+                    # Attest the artifact to Kosli
+                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
+                    kosli attest artifact ${'$'}ArtifactPath `
+                      --artifact-type file `
+                      --name ${'$'}ArtifactName `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --commit ${'$'}TrailName `
+                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
+                    }
+                    
+                    Write-
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli attest sonar"
+            id = "Kosli_attest_sonar"
+            scriptMode = script {
+                content = """
+                    kosli attest sonar `
+                      --name portfolio.security-scan `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Execute GitGuardian"
+            id = "Execut"
+            scriptMode = script {
+                content = """
+                    # Ensure the GitGuardian directory exists
+                    if (-not (Test-Path ${'$'}env:GitGuardianDir)) {
+                        New-Item -ItemType Directory -Path ${'$'}env:GitGuardianDir | Out-Null
+                    }
+                    
+                    # Run the scan, prettify JSON, and save to SARIF file
+                    ggshield secret scan commit-range HEAD~1 --format sarif |
+                        ConvertFrom-Json |
+                        ConvertTo-Json -Depth 10 |
+                        Tee-Object -FilePath "${'$'}env:GitGuardianDir\results.sarif"
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Kosli assert artifact (1)"
+            id = "Kosli_assert_artifact_1"
+            scriptMode = script {
+                content = """
+                    # Kosli Assert Artifact - TeamCity Build Step
+                    # Runs as the final gate before Octopus Deploy
+                    Write-Host "Starting Kosli Assert Artifact..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    
+                    # Path to the packaged artifact - must match the path used in Kosli Attest Artifact
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Verify the artifact exists
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    
+                    # Compute the artifact's SHA256 fingerprint
+                    # This must match the fingerprint Kosli calculated when we attested the artifact
+                    Write-Host "Computing fingerprint for: ${'$'}ArtifactPath"
+                    ${'$'}Fingerprint = kosli fingerprint ${'$'}ArtifactPath --artifact-type file --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}Fingerprint) {
+                        throw "Failed to compute artifact fingerprint"
+                    }
+                    ${'$'}Fingerprint = ${'$'}Fingerprint.Trim()
+                    Write-Host "Artifact fingerprint: ${'$'}Fingerprint"
+                    
+                    # Assert the artifact is compliant with the flow's template
+                    # Exits non-zero if any required attestation is missing or non-compliant
+                    Write-Host "Asserting artifact compliance against flow: ${'$'}FlowName"
+                    kosli assert artifact `
+                      --fingerprint ${'$'}Fingerprint `
+                      --flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %env.KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "Kosli assert artifact FAILED - artifact is not compliant. Deployment blocked."
+                    }
+                    
+                    Write-Host "Kosli Assert Artifact PASSED - artifact is compliant. Proceeding to deploy."
+                """.trimIndent()
+            }
+        }
+        powerShell {
+            name = "Push to GitHub"
+            id = "Push_to_GitHub"
+            scriptMode = script {
+                content = """
+                    #Requires -Version 7.0
+                    <#
+                    .SYNOPSIS
+                        Stages files and pushes to GitHub with a Conventional Commit message.
+                    
+                    .PARAMETER RepoPath
+                        Path to the local git repository. Defaults to the current directory.
+                    
+                    .PARAMETER Type
+                        Conventional commit type: feat, fix, chore, ci, docs, refactor, test, perf, build.
+                    
+                    .PARAMETER Scope
+                        Optional scope in parentheses e.g. "signing" → "chore(signing): …"
+                    
+                    .PARAMETER Message
+                        Short description (the commit subject line).
+                    
+                    .PARAMETER Body
+                        Optional longer description added to the commit body.
+                    
+                    .PARAMETER BreakingChange
+                        Marks the commit as a breaking change (appends ! and BREAKING CHANGE footer).
+                    
+                    .PARAMETER Files
+                        Specific files or globs to stage. Defaults to all changes (git add .).
+                    
+                    .PARAMETER Branch
+                        Branch to push to. Defaults to the current branch.
+                    
+                    .PARAMETER DryRun
+                        Shows what would happen without actually committing or pushing.
+                    
+                    .EXAMPLE
+                        # Stage everything and push
+                        .\git-conventional-push.ps1 `
+                            -RepoPath "D:\devops-gurdip-portfolio-main\devops-gurdip-portfolio-main" `
+                            -Type     "chore" `
+                            -Scope    "signing" `
+                            -Message  "add cosign signing and cloudsmith publish scripts"
+                    
+                    .EXAMPLE
+                        # Stage specific files only
+                        .\git-conventional-push.ps1 `
+                            -RepoPath "D:\devops-gurdip-portfolio-main\devops-gurdip-portfolio-main" `
+                            -Type     "ci" `
+                            -Scope    "release" `
+                            -Message  "add tar packaging and cosign pipeline" `
+                            -Files    "sign-artifact.ps1","publish-to-cloudsmith.ps1","create-package-tar.ps1"
+                    
+                    .EXAMPLE
+                        # Dry run to preview commit message
+                        .\git-conventional-push.ps1 `
+                            -RepoPath "D:\devops-gurdip-portfolio-main\devops-gurdip-portfolio-main" `
+                            -Type     "feat" `
+                            -Message  "add release pipeline" `
+                            -DryRun
+                    #>
+                    
+                    param(
+                        [string]   ${'$'}RepoPath       = (Get-Location).Path,
+                    
+                        [ValidateSet("feat","fix","chore","ci","docs","refactor","test","perf","build","style","revert")]
+                        [string]   ${'$'}Type           = "chore",
+                    
+                        [string]   ${'$'}Scope          = "",
+                        [string]   ${'$'}Message        = "",
+                        [string]   ${'$'}Body           = "",
+                        [switch]   ${'$'}BreakingChange,
+                        [string[]] ${'$'}Files          = @(),
+                        [string]   ${'$'}Branch         = "",
+                        [switch]   ${'$'}DryRun
+                    )
+                    
+                    Set-StrictMode -Version Latest
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    function Write-Step([string]${'$'}msg) {
+                        Write-Host "`n▶  ${'$'}msg" -ForegroundColor Cyan
+                    }
+                    
+                    function Assert-Command([string]${'$'}name) {
+                        if (-not (Get-Command ${'$'}name -ErrorAction SilentlyContinue)) {
+                            throw "Required tool '${'$'}name' not found on PATH."
+                        }
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Validate
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Assert-Command "git"
+                    
+                    if (-not (Test-Path ${'$'}RepoPath)) {
+                        throw "Repo path not found: ${'$'}RepoPath"
+                    }
+                    
+                    Push-Location ${'$'}RepoPath
+                    
+                    try {
+                    
+                    if (-not (Test-Path ".git")) {
+                        throw "${'$'}RepoPath is not a git repository."
+                    }
+                    
+                    if (-not ${'$'}Message) {
+                        throw "-Message is required."
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Build conventional commit subject
+                    # e.g.  chore(signing)!: add cosign scripts
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    ${'$'}scopePart   = if (${'$'}Scope) { "(${'$'}Scope)" } else { "" }
+                    ${'$'}breakPart   = if (${'$'}BreakingChange) { "!" } else { "" }
+                    ${'$'}subject     = "${'$'}{Type}${'$'}{scopePart}${'$'}{breakPart}: ${'$'}{Message}"
+                    
+                    # Full commit message
+                    ${'$'}fullMessage = ${'$'}subject
+                    if (${'$'}Body) {
+                        ${'$'}fullMessage += "`n`n${'$'}Body"
+                    }
+                    if (${'$'}BreakingChange) {
+                        ${'$'}fullMessage += "`n`nBREAKING CHANGE: ${'$'}Message"
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Resolve branch
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    if (-not ${'$'}Branch) {
+                        ${'$'}Branch = git rev-parse --abbrev-ref HEAD 2>&1
+                        if (${'$'}LASTEXITCODE -ne 0) { throw "Could not determine current branch." }
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Preview
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Write-Step "Conventional commit preview"
+                    Write-Host ""
+                    Write-Host "  Subject : ${'$'}subject" -ForegroundColor Yellow
+                    if (${'$'}Body)           { Write-Host "  Body    : ${'$'}Body" -ForegroundColor Gray }
+                    if (${'$'}BreakingChange) { Write-Host "  ⚠️  BREAKING CHANGE" -ForegroundColor Red }
+                    Write-Host "  Branch  : ${'$'}Branch" -ForegroundColor Gray
+                    Write-Host "  Repo    : ${'$'}RepoPath" -ForegroundColor Gray
+                    if (${'$'}Files) {
+                        Write-Host "  Files   :" -ForegroundColor Gray
+                        ${'$'}Files | ForEach-Object { Write-Host "    ${'$'}_" -ForegroundColor Gray }
+                    } else {
+                        Write-Host "  Files   : all changes (git add .)" -ForegroundColor Gray
+                    }
+                    
+                    if (${'$'}DryRun) {
+                        Write-Host ""
+                        Write-Host "  DRY RUN — nothing was committed or pushed." -ForegroundColor Magenta
+                        exit 0
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Stage
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Write-Step "Staging files"
+                    
+                    if (${'$'}Files.Count -gt 0) {
+                        foreach (${'$'}f in ${'$'}Files) {
+                            git add ${'$'}f
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "git add failed for: ${'$'}f" }
+                            Write-Host "  + ${'$'}f" -ForegroundColor Gray
+                        }
+                    } else {
+                        git add .
+                        if (${'$'}LASTEXITCODE -ne 0) { throw "git add . failed" }
+                        Write-Host "  + all changes" -ForegroundColor Gray
+                    }
+                    
+                    # Check there is actually something to commit
+                    ${'$'}status = git status --porcelain
+                    if (-not ${'$'}status) {
+                        Write-Host ""
+                        Write-Host "  Nothing to commit — working tree clean." -ForegroundColor Yellow
+                        exit 0
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Commit
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Write-Step "Committing"
+                    
+                    git commit -m ${'$'}fullMessage
+                    if (${'$'}LASTEXITCODE -ne 0) { throw "git commit failed." }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Push
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Write-Step "Pushing to origin/${'$'}Branch"
+                    
+                    git push origin ${'$'}Branch
+                    if (${'$'}LASTEXITCODE -ne 0) { throw "git push failed." }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Done
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    ${'$'}sha = git rev-parse --short HEAD
+                    Write-Host ""
+                    Write-Host "✅  Pushed ${'$'}sha → origin/${'$'}Branch" -ForegroundColor Green
+                    Write-Host "    ${'$'}subject" -ForegroundColor Cyan
+                    
+                    } finally {
+                        Pop-Location
+                    }
                 """.trimIndent()
             }
         }
