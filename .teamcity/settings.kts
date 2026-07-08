@@ -3,6 +3,7 @@ import jetbrains.buildServer.configs.kotlin.buildFeatures.perfmon
 import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
+import jetbrains.buildServer.configs.kotlin.triggers.vcs
 
 /*
 The settings script is an entry point for defining a TeamCity
@@ -1179,6 +1180,13 @@ object Build : BuildType({
                     }
                 """.trimIndent()
             }
+        }
+    }
+
+    triggers {
+        vcs {
+            branchFilter = ""
+            enableQueueOptimization = false
         }
     }
 
