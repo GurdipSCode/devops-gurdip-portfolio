@@ -4,6 +4,7 @@ import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
+import jetbrains.buildServer.configs.kotlin.vcs.GitVcsRoot
 
 /*
 The settings script is an entry point for defining a TeamCity
@@ -31,6 +32,8 @@ version = "2026.1"
 
 project {
 
+    vcsRoot(HttpsGithubComGurdipSCodeDevopsCiScriptsRefsHeadsMain)
+
     buildType(Semgrep)
     buildType(Build)
 
@@ -53,6 +56,7 @@ object Build : BuildType({
 
     vcs {
         root(DslContext.settingsRoot)
+        root(HttpsGithubComGurdipSCodeDevopsCiScriptsRefsHeadsMain)
     }
 
     steps {
@@ -1206,5 +1210,15 @@ object Semgrep : BuildType({
 
     vcs {
         root(DslContext.settingsRoot)
+    }
+})
+
+object HttpsGithubComGurdipSCodeDevopsCiScriptsRefsHeadsMain : GitVcsRoot({
+    name = "https://github.com/GurdipSCode/devops-ci-scripts#refs/heads/main"
+    url = "https://github.com/GurdipSCode/devops-ci-scripts"
+    branch = "refs/heads/main"
+    authMethod = token {
+        userName = "oauth2"
+        tokenId = "tc_token_id:CID_d928835e688af7380f1585b923074b93:-1:5b66000b-2ac2-4f6b-8c54-020d9b519620"
     }
 })
