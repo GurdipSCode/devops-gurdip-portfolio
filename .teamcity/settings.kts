@@ -55,16 +55,6 @@ project {
                 secretId = "credentialsJSON:64dd9d91-0ead-448f-a5a1-c8af17fc1fb2"
             }
         }
-        hashiCorpVaultConnection {
-            id = "hashicorpVaultConnection1"
-            name = "HashiCorp Vault (1)"
-            vaultNamespace = "DevOps/Portfolio"
-            url = "http://vaultdev.gssira.comocalhost:8200"
-            authMethod = appRole {
-                roleId = "a3076e49-1172-7beb-d487-344ab7cd384c"
-                secretId = "credentialsJSON:64dd9d91-0ead-448f-a5a1-c8af17fc1fb2"
-            }
-        }
     }
 }
 
