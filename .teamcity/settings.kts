@@ -46,6 +46,16 @@ project {
             clientSecret = "credentialsJSON:5138f84e-03c5-4492-ab19-1d365bca3f0e"
         }
         hashiCorpVaultConnection {
+            id = "Vault"
+            name = "HashiCorp Vault (2)"
+            vaultNamespace = "DevOps/Portfolio"
+            url = "http://vaultdev.gssira.com:8200"
+            authMethod = appRole {
+                roleId = "a3076e49-1172-7beb-d487-344ab7cd384c"
+                secretId = "credentialsJSON:64dd9d91-0ead-448f-a5a1-c8af17fc1fb2"
+            }
+        }
+        hashiCorpVaultConnection {
             id = "hashicorpVaultConnection1"
             name = "HashiCorp Vault (1)"
             vaultNamespace = "DevOps/Portfolio"
