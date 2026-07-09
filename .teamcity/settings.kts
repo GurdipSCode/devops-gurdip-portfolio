@@ -3,6 +3,7 @@ import jetbrains.buildServer.configs.kotlin.buildFeatures.perfmon
 import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
+import jetbrains.buildServer.configs.kotlin.projectFeatures.hashiCorpVaultConnection
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
 import jetbrains.buildServer.configs.kotlin.vcs.GitVcsRoot
 
@@ -43,6 +44,16 @@ project {
             displayName = "GitHub.com"
             clientId = "Ov23liAmrqa9p50bSgoe"
             clientSecret = "credentialsJSON:5138f84e-03c5-4492-ab19-1d365bca3f0e"
+        }
+        hashiCorpVaultConnection {
+            id = "hashicorpVaultConnection1"
+            name = "HashiCorp Vault (1)"
+            vaultNamespace = "DevOps/Portfolio"
+            url = "http://vaultdev.gssira.comocalhost:8200"
+            authMethod = appRole {
+                roleId = "a3076e49-1172-7beb-d487-344ab7cd384c"
+                secretId = "credentialsJSON:64dd9d91-0ead-448f-a5a1-c8af17fc1fb2"
+            }
         }
     }
 }
