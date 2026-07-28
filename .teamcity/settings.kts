@@ -879,7 +879,7 @@ object Build : BuildType({
                       --trail ${'$'}TrailName `
                       --org ${'$'}KosliOrg `
                       --commit ${'$'}TrailName `
-                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --commit-url "https://github.com/GurdipSCode/devops-gurdip-portfolio/%build.vcs.number%" `
                       --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
                       --api-token %env.KOSLI_KEY%
                     
