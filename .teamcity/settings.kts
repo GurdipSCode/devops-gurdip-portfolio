@@ -45,6 +45,11 @@ project {
             query = "kv/data/KOSLI_API_KEY!/key"
             vaultId = "Vault"
         }
+        hashiCorpVaultParameter {
+            name = "COSIGN_KEY"
+            query = "kv/data/COSIGN_KEY!/key"
+            vaultId = "Vault"
+        }
     }
 
     features {
