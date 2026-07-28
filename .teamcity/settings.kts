@@ -4,6 +4,7 @@ import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
 import jetbrains.buildServer.configs.kotlin.projectFeatures.hashiCorpVaultConnection
+import jetbrains.buildServer.configs.kotlin.remoteParameters.hashiCorpVaultParameter
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
 import jetbrains.buildServer.configs.kotlin.vcs.GitVcsRoot
 
@@ -37,6 +38,14 @@ project {
 
     buildType(Semgrep)
     buildType(Build)
+
+    params {
+        hashiCorpVaultParameter {
+            name = "KOSLI_API_KEY"
+            query = "kv/data/KOSLI_API_KEY!/key"
+            vaultId = "Vault"
+        }
+    }
 
     features {
         githubConnection {
