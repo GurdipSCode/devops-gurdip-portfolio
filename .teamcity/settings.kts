@@ -835,7 +835,7 @@ object Build : BuildType({
                       --org ${'$'}KosliOrg `
                       --description ${'$'}FlowDescription `
                       --template-file ${'$'}TemplateFile `
-                      --api-token %env.KOSLI_KEY%
+                      --api-token %KOSLI_API_KEY%%
                     
                     # Begin the trail
                     kosli begin trail ${'$'}TrailName `
