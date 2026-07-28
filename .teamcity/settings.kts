@@ -879,6 +879,8 @@ object Build : BuildType({
                     }
                     Write-Host "Attesting artifact: ${'$'}ArtifactPath"
                     
+                    ${'$'}Sha = (git rev-parse HEAD).Trim()
+                    
                     # Attest the artifact to Kosli
                     # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
                     kosli attest artifact ${'$'}ArtifactPath `
@@ -888,9 +890,9 @@ object Build : BuildType({
                       --trail ${'$'}TrailName `
                       --org ${'$'}KosliOrg `
                       --commit ${'$'}TrailName `
-                      --commit-url "https://github.com/GurdipSCode/devops-gurdip-portfolio/%build.vcs.number%" `
+                      --commit-url "https://github.com/GurdipSCode/devops-gurdip-portfolio/commit/commit/${'$'}Sha" `
                       --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
-                      --api-token %env.KOSLI_KEY%
+                      --api-token %KOSLI_API_KEY%
                     
                     if (${'$'}LASTEXITCODE -ne 0) {
                         throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
