@@ -972,7 +972,7 @@ object Build : BuildType({
                       --fingerprint ${'$'}Fingerprint `
                       --flow ${'$'}FlowName `
                       --org ${'$'}KosliOrg `
-                      --api-token %KOSLI_API_KEY%%
+                      --api-token %KOSLI_API_KEY%
                     
                     if (${'$'}LASTEXITCODE -ne 0) {
                         throw "Kosli assert artifact FAILED - artifact is not compliant. Deployment blocked."
