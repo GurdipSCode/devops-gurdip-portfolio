@@ -70,6 +70,8 @@ project {
 object Build : BuildType({
     name = "Build"
 
+    allowExternalStatus = true
+
     params {
         param("env.KOSLI_KEY", "se")
         param("teamcity.pullRequest.number", "")
