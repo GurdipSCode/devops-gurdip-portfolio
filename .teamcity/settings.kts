@@ -803,7 +803,7 @@ object Build : BuildType({
                       --org ${'$'}KosliOrg `
                       --description ${'$'}FlowDescription `
                       --template-file kosli/flow-template.yml `
-                      --api-token %env.KOSLI_KEY%
+                      --api-token %KOSLI_API_KEY%%
                 """.trimIndent()
             }
         }
