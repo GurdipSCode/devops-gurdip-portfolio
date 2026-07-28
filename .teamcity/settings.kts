@@ -897,8 +897,6 @@ object Build : BuildType({
                     if (${'$'}LASTEXITCODE -ne 0) {
                         throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
                     }
-                    
-                    Write-
                 """.trimIndent()
             }
         }
