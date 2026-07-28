@@ -71,6 +71,7 @@ object Build : BuildType({
     name = "Build"
 
     params {
+        param("env.KOSLI_KEY", "se")
         param("teamcity.pullRequest.number", "")
     }
 
