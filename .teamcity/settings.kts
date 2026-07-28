@@ -890,7 +890,7 @@ object Build : BuildType({
                       --trail ${'$'}TrailName `
                       --org ${'$'}KosliOrg `
                       --commit ${'$'}TrailName `
-                      --commit-url "https://github.com/GurdipSCode/devops-gurdip-portfolio/commit/commit/${'$'}Sha" `
+                      --commit-url "https://github.com/GurdipSCode/devops-gurdip-portfolio/commit/${'$'}Sha" `
                       --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
                       --api-token %KOSLI_API_KEY%
                     
