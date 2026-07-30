@@ -80,6 +80,12 @@ object Build : BuildType({
     params {
         param("env.KOSLI_KEY", "se")
         param("teamcity.pullRequest.number", "")
+        hashiCorpVaultParameter {
+            name = "COSIGN_PASSWORD"
+            query = "kv/data/COSIGN_PASSWORD!/key"
+            vaultId = "Vault"
+            param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
+        }
     }
 
     vcs {
