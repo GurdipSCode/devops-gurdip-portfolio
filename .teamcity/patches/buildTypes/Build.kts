@@ -1148,5 +1148,215 @@ changeBuildType(RelativeId("Build")) {
                 }
             }
         }
+        insert(20) {
+            powerShell {
+                name = "Create Octopus Release"
+                id = "Create_Octopus_Release"
+                scriptMode = script {
+                    content = """
+                        #Requires -Version 7.0
+                        <#
+                        .SYNOPSIS
+                            Creates an Octopus Deploy release for the netlify-portfolio project.
+                        
+                        .DESCRIPTION
+                            Wraps the Octopus CLI. Works with either the modern 'octopus' CLI or the
+                            legacy 'octo' CLI, whichever is on PATH.
+                        
+                            Credentials come from parameters or environment variables, so TeamCity can
+                            supply them as environment parameters rather than command-line arguments
+                            (arguments are visible in the agent's process list):
+                        
+                                env.OCTOPUS_URL     = %octopus.url%
+                                env.OCTOPUS_API_KEY = %vault.octopus.apikey%
+                                env.OCTOPUS_SPACE   = %octopus.space%          (optional, defaults to "Default")
+                        
+                            If no version is supplied, the TeamCity build number is used; failing that,
+                            Octopus applies the project's own versioning strategy.
+                        
+                        .PARAMETER ProjectName
+                            Octopus project. Defaults to netlify-portfolio.
+                        
+                        .PARAMETER ReleaseVersion
+                            Version for the release. Defaults to ${'$'}env:BUILD_NUMBER (set by TeamCity).
+                        
+                        .PARAMETER PackageVersion
+                            Version to use for every package in the release. Defaults to the release
+                            version when one is known. Omit both to let Octopus pick the latest package.
+                        
+                        .PARAMETER Channel
+                            Channel name. Omit to use the project's default channel.
+                        
+                        .PARAMETER GitRef
+                            For config-as-code projects: the git ref holding the deployment process,
+                            e.g. refs/heads/main. Ignored by non-CaC projects.
+                        
+                        .PARAMETER ReleaseNotes
+                            Release notes text. Takes precedence over -ReleaseNotesFile.
+                        
+                        .PARAMETER ReleaseNotesFile
+                            Path to a file containing release notes.
+                        
+                        .PARAMETER IgnoreExisting
+                            Succeed quietly if a release with this version already exists, instead of
+                            failing the build. Useful when a build gets re-run.
+                        
+                        .EXAMPLE
+                            # TeamCity: URL and API key as environment parameters
+                            .\create-octopus-release.ps1
+                        
+                        .EXAMPLE
+                            # Explicit version and channel
+                            .\create-octopus-release.ps1 -ReleaseVersion "2026.7.30.1" -Channel "Production"
+                        
+                        .EXAMPLE
+                            # Config-as-code project
+                            .\create-octopus-release.ps1 -GitRef "refs/heads/main" -ReleaseNotes "Portfolio refresh"
+                        #>
+                        
+                        [CmdletBinding()]
+                        param(
+                            [string] ${'$'}ProjectName      = "netlify-portfolio",
+                            [string] ${'$'}OctopusServerUrl = ${'$'}env:OCTOPUS_URL,
+                            [string] ${'$'}OctopusApiKey    = %OCTOPUS_KEY%,
+                            [string] ${'$'}Space            = ${'$'}(if (${'$'}env:OCTOPUS_SPACE) { ${'$'}env:OCTOPUS_SPACE } else { "Default" }),
+                            [string] ${'$'}ReleaseVersion   = ${'$'}env:BUILD_NUMBER,
+                            [string] ${'$'}PackageVersion   = "",
+                            [string] ${'$'}Channel          = "",
+                            [string] ${'$'}GitRef           = "",
+                            [string] ${'$'}ReleaseNotes     = "",
+                            [string] ${'$'}ReleaseNotesFile = "",
+                            [switch] ${'$'}IgnoreExisting
+                        )
+                        
+                        Set-StrictMode -Version Latest
+                        ${'$'}ErrorActionPreference = "Stop"
+                        
+                        # ─────────────────────────────────────────────────────────────
+                        # Pre-flight
+                        # ─────────────────────────────────────────────────────────────
+                        
+                        Write-Host "`n▶  Pre-flight checks" -ForegroundColor Cyan
+                        
+                        # Modern CLI first, legacy as fallback.
+                        ${'$'}cliName = ${'$'}null
+                        if (Get-Command octopus -ErrorAction SilentlyContinue) {
+                            ${'$'}cliName = "octopus"
+                        } elseif (Get-Command octo -ErrorAction SilentlyContinue) {
+                            ${'$'}cliName = "octo"
+                        } else {
+                            throw @"
+                        Neither 'octopus' nor 'octo' found on PATH. Install one of:
+                          winget install OctopusDeploy.Cli          (modern CLI)
+                          dotnet tool install -g Octopus.DotNet.Cli (legacy 'dotnet octo')
+                        Or add an 'Octopus Deploy' build feature / tool to the TeamCity agent.
+                        "@
+                        }
+                        
+                        if ([string]::IsNullOrWhiteSpace(${'$'}OctopusServerUrl)) {
+                            throw "No Octopus server URL. Pass -OctopusServerUrl or set OCTOPUS_URL (e.g. env.OCTOPUS_URL = %octopus.url% in TeamCity)."
+                        }
+                        
+                        if ([string]::IsNullOrWhiteSpace(${'$'}OctopusApiKey)) {
+                            throw "No Octopus API key. Pass -OctopusApiKey or set OCTOPUS_API_KEY (e.g. env.OCTOPUS_API_KEY = %vault.octopus.apikey% in TeamCity)."
+                        }
+                        
+                        ${'$'}OctopusServerUrl = ${'$'}OctopusServerUrl.TrimEnd('/')
+                        
+                        if (${'$'}ReleaseNotesFile -and -not ${'$'}ReleaseNotes) {
+                            if (-not (Test-Path -LiteralPath ${'$'}ReleaseNotesFile)) {
+                                throw "Release notes file not found: ${'$'}ReleaseNotesFile"
+                            }
+                            ${'$'}ReleaseNotes = (Get-Content -LiteralPath ${'$'}ReleaseNotesFile -Raw).Trim()
+                        }
+                        
+                        # Default package version to the release version when we have one.
+                        if (-not ${'$'}PackageVersion -and ${'$'}ReleaseVersion) {
+                            ${'$'}PackageVersion = ${'$'}ReleaseVersion
+                        }
+                        
+                        Write-Host "  CLI         : ${'$'}cliName"
+                        Write-Host "  Server      : ${'$'}OctopusServerUrl"
+                        Write-Host "  Space       : ${'$'}Space"
+                        Write-Host "  Project     : ${'$'}ProjectName"
+                        Write-Host "  Version     : ${'$'}(if (${'$'}ReleaseVersion) { ${'$'}ReleaseVersion } else { '(Octopus will generate)' })"
+                        Write-Host "  Channel     : ${'$'}(if (${'$'}Channel) { ${'$'}Channel } else { '(project default)' })"
+                        
+                        # ─────────────────────────────────────────────────────────────
+                        # Build the argument list
+                        # ─────────────────────────────────────────────────────────────
+                        
+                        Write-Host "`n▶  Creating release" -ForegroundColor Cyan
+                        
+                        if (${'$'}cliName -eq "octopus") {
+                            ${'$'}cliArgs = @(
+                                "release", "create"
+                                "--project",  ${'$'}ProjectName
+                                "--space",    ${'$'}Space
+                                "--server",   ${'$'}OctopusServerUrl
+                                "--api-key",  ${'$'}OctopusApiKey
+                                "--no-prompt"
+                            )
+                            if (${'$'}ReleaseVersion) { ${'$'}cliArgs += @("--version",         ${'$'}ReleaseVersion) }
+                            if (${'$'}PackageVersion) { ${'$'}cliArgs += @("--package-version", ${'$'}PackageVersion) }
+                            if (${'$'}Channel)        { ${'$'}cliArgs += @("--channel",         ${'$'}Channel) }
+                            if (${'$'}GitRef)         { ${'$'}cliArgs += @("--git-ref",         ${'$'}GitRef) }
+                            if (${'$'}ReleaseNotes)   { ${'$'}cliArgs += @("--release-notes",   ${'$'}ReleaseNotes) }
+                            if (${'$'}IgnoreExisting) { ${'$'}cliArgs += "--ignore-existing" }
+                        }
+                        else {
+                            ${'$'}cliArgs = @(
+                                "create-release"
+                                "--project",  ${'$'}ProjectName
+                                "--space",    ${'$'}Space
+                                "--server",   ${'$'}OctopusServerUrl
+                                "--apiKey",   ${'$'}OctopusApiKey
+                            )
+                            if (${'$'}ReleaseVersion) { ${'$'}cliArgs += @("--version",        ${'$'}ReleaseVersion) }
+                            if (${'$'}PackageVersion) { ${'$'}cliArgs += @("--packageVersion", ${'$'}PackageVersion) }
+                            if (${'$'}Channel)        { ${'$'}cliArgs += @("--channel",        ${'$'}Channel) }
+                            if (${'$'}GitRef)         { ${'$'}cliArgs += @("--gitRef",         ${'$'}GitRef) }
+                            if (${'$'}ReleaseNotes)   { ${'$'}cliArgs += @("--releaseNotes",   ${'$'}ReleaseNotes) }
+                            if (${'$'}IgnoreExisting) { ${'$'}cliArgs += "--ignoreExisting" }
+                        }
+                        
+                        # Echo the command with the key redacted, so build logs stay useful but clean.
+                        ${'$'}safeArgs = foreach (${'$'}a in ${'$'}cliArgs) { if (${'$'}a -eq ${'$'}OctopusApiKey) { "***" } else { ${'$'}a } }
+                        Write-Host "  ${'$'}cliName ${'$'}(${'$'}safeArgs -join ' ')" -ForegroundColor Gray
+                        Write-Host ""
+                        
+                        & ${'$'}cliName @cliArgs
+                        if (${'$'}LASTEXITCODE -ne 0) {
+                            throw "${'$'}cliName release creation failed with exit code ${'$'}LASTEXITCODE"
+                        }
+                        
+                        # ─────────────────────────────────────────────────────────────
+                        # Result
+                        # ─────────────────────────────────────────────────────────────
+                        
+                        Write-Host ""
+                        Write-Host "✅  Release created for ${'$'}ProjectName." -ForegroundColor Green
+                        
+                        if (${'$'}ReleaseVersion) {
+                            Write-Host "    Version : ${'$'}ReleaseVersion"
+                            if (${'$'}env:TEAMCITY_VERSION) {
+                                Write-Host "##teamcity[setParameter name='octopus.release.version' value='${'$'}ReleaseVersion']"
+                            }
+                        } else {
+                            Write-Host "    Version : generated by Octopus — see the CLI output above." -ForegroundColor Gray
+                        }
+                        
+                        ${'$'}result = [ordered]@{
+                            Project = ${'$'}ProjectName
+                            Version = ${'$'}ReleaseVersion
+                            Space   = ${'$'}Space
+                            Server  = ${'$'}OctopusServerUrl
+                        }
+                        
+                        return ${'$'}result
+                    """.trimIndent()
+                }
+            }
+        }
     }
 }
