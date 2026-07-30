@@ -3,6 +3,7 @@ package patches.buildTypes
 import jetbrains.buildServer.configs.kotlin.*
 import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
+import jetbrains.buildServer.configs.kotlin.remoteParameters.hashiCorpVaultParameter
 import jetbrains.buildServer.configs.kotlin.ui.*
 
 /*
@@ -11,6 +12,17 @@ To apply the patch, change the buildType with id = 'Build'
 accordingly, and delete the patch script.
 */
 changeBuildType(RelativeId("Build")) {
+    params {
+        add {
+            hashiCorpVaultParameter {
+                name = "OCTOPUS_KEY"
+                query = "S"
+                vaultId = "Vault"
+                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
+            }
+        }
+    }
+
     expectSteps {
         powerShell {
             name = "Create Artifact Dirs"
