@@ -16,7 +16,7 @@ changeBuildType(RelativeId("Build")) {
         add {
             hashiCorpVaultParameter {
                 name = "OCTOPUS_KEY"
-                query = "S"
+                query = "kv/data/OCTOPUS_API_KEY!/key"
                 vaultId = "Vault"
                 param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
             }
