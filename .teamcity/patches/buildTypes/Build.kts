@@ -14,10 +14,17 @@ accordingly, and delete the patch script.
 changeBuildType(RelativeId("Build")) {
     params {
         add {
+            param("octopus.url", "http://octopusdeploy.gssira.com")
+        }
+        add {
+            param("octopus.space", "Default")
+        }
+        add {
             hashiCorpVaultParameter {
                 name = "OCTOPUS_KEY"
-                query = "kv/data/OCTOPUS_API_KEY!/key"
+                query = "kv/data/OCTOPUS_KEY!/key"
                 vaultId = "Vault"
+                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
             }
         }
     }
