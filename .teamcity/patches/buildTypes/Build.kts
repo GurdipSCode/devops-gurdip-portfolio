@@ -1185,10 +1185,6 @@ changeBuildType(RelativeId("Build")) {
                             supply them as environment parameters rather than command-line arguments
                             (arguments are visible in the agent's process list):
                         
-                                env.OCTOPUS_URL     = %octopus.url%
-                                env.OCTOPUS_API_KEY = %vault.octopus.apikey%
-                                env.OCTOPUS_SPACE   = %octopus.space%          (optional, defaults to "Default")
-                        
                             If no version is supplied, the TeamCity build number is used; failing that,
                             Octopus applies the project's own versioning strategy.
                         
