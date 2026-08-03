@@ -24,7 +24,6 @@ changeBuildType(RelativeId("Build")) {
                 name = "OCTOPUS_KEY"
                 query = "kv/data/OCTOPUS_KEY!/key"
                 vaultId = "Vault"
-                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
             }
         }
     }
@@ -1272,7 +1271,7 @@ changeBuildType(RelativeId("Build")) {
                         }
                         
                         if ([string]::IsNullOrWhiteSpace(${'$'}OctopusApiKey)) {
-                            throw "No Octopus API key. Pass -OctopusApiKey or set OCTOPUS_API_KEY (e.g. env.OCTOPUS_API_KEY = %vault.octopus.apikey% in TeamCity)."
+                            throw "No Octopus API key. Pass -OctopusApiKey or set OCTOPUS_API_KEY (e.g. env.OCTOPUS_API_KEY)."
                         }
                         
                         ${'$'}OctopusServerUrl = ${'$'}OctopusServerUrl.TrimEnd('/')
