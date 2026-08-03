@@ -1,6 +1,7 @@
 package patches.buildTypes
 
 import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.buildSteps.PowerShellStep
 import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.remoteParameters.hashiCorpVaultParameter
@@ -1164,6 +1165,22 @@ changeBuildType(RelativeId("Build")) {
             }
         }
         items.removeAt(3)
+        update<PowerShellStep>(5) {
+            clearConditions()
+            scriptMode = script {
+                content = """
+                    git fetch --tags --force | Out-Host
+                    
+                    ${'$'}next = (& git-cliff --config cliff.toml --unreleased --bumped-version).Trim()
+                    if ([string]::IsNullOrWhiteSpace(${'$'}next)) { exit 0 }
+                    
+                    # Create release notes using the version label we computed
+                    git-cliff --config cliff.toml --unreleased --tag "v${'$'}next" -o CHANGELOG.md
+                    Write-Host "Generated CHANGELOG.md for v${'$'}next"
+                """.trimIndent()
+            }
+            param("teamcity.kubernetes.executor.pull.policy", "")
+        }
         insert(19) {
             powerShell {
                 name = "Push Octopus Build Information"
