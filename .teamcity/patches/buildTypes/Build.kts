@@ -1156,6 +1156,14 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        insert(1) {
+            script {
+                name = "NPM Install"
+                id = "NPM_Build_1"
+                scriptContent = "npm i"
+            }
+        }
+        items.removeAt(3)
         insert(19) {
             powerShell {
                 name = "Push Octopus Build Information"
