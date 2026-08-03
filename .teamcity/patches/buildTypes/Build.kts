@@ -29,6 +29,14 @@ changeBuildType(RelativeId("Build")) {
         }
     }
 
+    vcs {
+
+        check(checkoutMode == CheckoutMode.AUTO) {
+            "Unexpected option value: checkoutMode = $checkoutMode"
+        }
+        checkoutMode = CheckoutMode.ON_AGENT
+    }
+
     expectSteps {
         powerShell {
             name = "Create Artifact Dirs"
