@@ -18,14 +18,17 @@ changeBuildType(RelativeId("Build")) {
             param("octopus.url", "http://octopusdeploy.gssira.com")
         }
         add {
-            param("octopus.space", "Default")
-        }
-        add {
             hashiCorpVaultParameter {
                 name = "OCTOPUS_KEY"
                 query = "kv/data/OCTOPUS_KEY!/key"
                 vaultId = "Vault"
             }
+        }
+        add {
+            param("env.Path", """%env.Path%;C:\tools\git-cliff""")
+        }
+        add {
+            param("octopus.space", "Default")
         }
     }
 
