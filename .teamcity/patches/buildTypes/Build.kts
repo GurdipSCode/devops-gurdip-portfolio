@@ -29,6 +29,11 @@ changeBuildType(RelativeId("Build")) {
         }
     }
 
+    vcs {
+        remove(DslContext.settingsRoot.id!!)
+        add(RelativeId("PortfolioGitMain1"))
+    }
+
     expectSteps {
         powerShell {
             name = "Create Artifact Dirs"
