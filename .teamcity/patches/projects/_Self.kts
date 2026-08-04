@@ -29,7 +29,7 @@ changeProject(DslContext.projectId) {
             authMethod = appRole {
                 endpointPath = "approle"
                 roleId = "a3076e49-1172-7beb-d487-344ab7cd384c"
-                secretId = "credentialsJSON:81b25e05-f1eb-4444-8469-7e669091460b"
+                secretId = "credentialsJSON:83c3ffa7-205e-49aa-9174-b40ec4179bcb"
             }
             param("teamcity.vault.requirement", "")
             param("gcp-endpoint-path", "")
