@@ -30,6 +30,12 @@ changeBuildType(RelativeId("Build")) {
     }
 
     vcs {
+
+        check(checkoutMode == CheckoutMode.AUTO) {
+            "Unexpected option value: checkoutMode = $checkoutMode"
+        }
+        checkoutMode = CheckoutMode.ON_AGENT
+
         remove(DslContext.settingsRoot.id!!)
         add(RelativeId("PortfolioGitMain1"))
     }
