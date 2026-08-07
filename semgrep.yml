@@ -1,0 +1,53 @@
+version: 1
+
+rulesets:
+  # ---------------------------
+  # Core JavaScript Security
+  # ---------------------------
+  - javascript.lang.security.audit
+  - javascript.lang.security.injection
+  - javascript.lang.security.xss
+  - javascript.lang.security.crypto
+
+  # ---------------------------
+  # Node / npm specific issues
+  # ---------------------------
+  - javascript.node.security.audit
+  - javascript.node.security.path-traversal
+  - javascript.node.security.child-process
+
+  # ---------------------------
+  # Framework awareness
+  # ---------------------------
+  - javascript.react.security.audit
+  - javascript.express.security.audit
+
+  # ---------------------------
+  # Dependency & ecosystem risks
+  # ---------------------------
+  - javascript.supply-chain.audit
+
+  # ---------------------------
+  # Lightweight code quality
+  # (safe for portfolios)
+  # ---------------------------
+  - javascript.lang.best-practice
+
+exclude:
+  - node_modules/
+  - dist/
+  - build/
+  - coverage/
+  - .next/
+  - .nuxt/
+  - public/
+  - "*.min.js"
+  - "*.bundle.js"
+
+severity:
+  - ERROR
+  - WARNING
+
+confidence:
+  - HIGH
+  - MEDIUM
