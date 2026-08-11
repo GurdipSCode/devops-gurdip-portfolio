@@ -13,10 +13,17 @@ changeBuildType(RelativeId("Build")) {
     params {
         add {
             hashiCorpVaultParameter {
+                name = "COSIGN_PASSWORD"
+                query = "s"
+                vaultId = "Vault"
+                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
+            }
+        }
+        add {
+            hashiCorpVaultParameter {
                 name = "COSIGN_KEY"
                 query = "kv/data/COSIGN_KEY!/key"
                 vaultId = "Vault"
-                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
             }
         }
     }
