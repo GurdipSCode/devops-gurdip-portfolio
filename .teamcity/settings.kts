@@ -52,7 +52,7 @@ project {
             url = "http://vaultdev.gssira.com:8200"
             authMethod = appRole {
                 roleId = "a3076e49-1172-7beb-d487-344ab7cd384c"
-                secretId = "credentialsJSON:64dd9d91-0ead-448f-a5a1-c8af17fc1fb2"
+                secretId = "credentialsJSON:d614325f-a3dd-438b-a61c-f10b9f78c157"
             }
         }
     }
