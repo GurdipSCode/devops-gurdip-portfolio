@@ -4,6 +4,7 @@ import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.projectFeatures.githubConnection
 import jetbrains.buildServer.configs.kotlin.projectFeatures.hashiCorpVaultConnection
+import jetbrains.buildServer.configs.kotlin.remoteParameters.hashiCorpVaultParameter
 import jetbrains.buildServer.configs.kotlin.triggers.vcs
 import jetbrains.buildServer.configs.kotlin.vcs.GitVcsRoot
 
@@ -63,6 +64,12 @@ object Build : BuildType({
 
     params {
         param("teamcity.pullRequest.number", "")
+        hashiCorpVaultParameter {
+            name = "OCTOPUS_KEY"
+            query = "kv/data/OCTOPUS_KEY!/key"
+            vaultId = "Vault"
+            param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
+        }
     }
 
     vcs {
