@@ -13,6 +13,14 @@ changeBuildType(RelativeId("Build")) {
     params {
         add {
             hashiCorpVaultParameter {
+                name = "KOSLI_KEY"
+                query = "kv/data/KOSLI_API_KEY!/key"
+                vaultId = "Vault"
+                param("buildTypeId", "DevopsGurdip_DevopsGurdipPortfolio_Build")
+            }
+        }
+        add {
+            hashiCorpVaultParameter {
                 name = "COSIGN_PASSWORD"
                 query = "kv/data/COSIGN_PASSWORD!/key"
                 vaultId = "Vault"
