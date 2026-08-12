@@ -1165,6 +1165,19 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        update<PowerShellStep>(12) {
+            clearConditions()
+            scriptMode = script {
+                content = """
+                    kosli create flow ${'$'}FlowName `
+                      --org ${'$'}KosliOrg `
+                      --description ${'$'}FlowDescription `
+                      --template-file kosli/flow-template.yml `
+                      --api-token %KOSLI_KEY%
+                """.trimIndent()
+            }
+            param("teamcity.kubernetes.executor.pull.policy", "")
+        }
         update<PowerShellStep>(13) {
             clearConditions()
             scriptMode = script {
