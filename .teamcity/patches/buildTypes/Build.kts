@@ -1199,7 +1199,7 @@ changeBuildType(RelativeId("Build")) {
                       --description "Starting Kosli trail for Portfolio build %env.BUILD_NUMBER% (commit ${'$'}TrailName)" `
                       --flow ${'$'}FlowName `
                       --org ${'$'}KosliOrg `
-                      --api-token %env.KOSLI_KEY%
+                      --api-token %KOSLI_KEY%
                     
                     Write-Host "Kosli Begin Trail completed successfully."
                 """.trimIndent()
