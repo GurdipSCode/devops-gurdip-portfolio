@@ -1165,6 +1165,20 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        update<PowerShellStep>(15) {
+            clearConditions()
+            scriptMode = script {
+                content = """
+                    kosli attest sonar `
+                      --name portfolio.security-scan `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --api-token %KOSLI_KEY%
+                """.trimIndent()
+            }
+            param("teamcity.kubernetes.executor.pull.policy", "")
+        }
         update<PowerShellStep>(17) {
             clearConditions()
             scriptMode = script {
