@@ -1165,6 +1165,58 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        update<PowerShellStep>(14) {
+            clearConditions()
+            scriptMode = script {
+                content = """
+                    # Kosli Attest Artifact - TeamCity Build Step
+                    Write-Host "Starting Kosli Attest Artifact..."
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # CONFIGURATION
+                    ${'$'}KosliOrg     = "gurdipdevops"
+                    ${'$'}FlowName     = "portfolio-flow"
+                    ${'$'}ArtifactName = "portfolio"   # must match the artifact name in your flow-template.yml
+                    
+                    # Path to the packaged artifact produced by the "Package Dist Folder" step
+                    # Adjust this to wherever step 15 actually writes its output
+                    ${'$'}ArtifactPath = "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    # Get the git commit SHA (used as the trail name, matches Begin Trail step)
+                    ${'$'}TrailName = git rev-parse HEAD
+                    if (${'$'}LASTEXITCODE -ne 0 -or -not ${'$'}TrailName) {
+                        throw "Failed to get git commit SHA via 'git rev-parse HEAD'"
+                    }
+                    Write-Host "Trail (commit): ${'$'}TrailName"
+                    
+                    # Verify the artifact actually exists before attesting
+                    if (-not (Test-Path ${'$'}ArtifactPath)) {
+                        throw "Artifact not found at: ${'$'}ArtifactPath"
+                    }
+                    Write-Host "Attesting artifact: ${'$'}ArtifactPath"
+                    
+                    # Attest the artifact to Kosli
+                    # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
+                    kosli attest artifact ${'$'}ArtifactPath `
+                      --artifact-type file `
+                      --name ${'$'}ArtifactName `
+                      --flow ${'$'}FlowName `
+                      --trail ${'$'}TrailName `
+                      --org ${'$'}KosliOrg `
+                      --commit ${'$'}TrailName `
+                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
+                      --api-token %KOSLI_KEY%
+                    
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        throw "kosli attest artifact failed with exit code ${'$'}LASTEXITCODE"
+                    }
+                    
+                    Write-
+                """.trimIndent()
+            }
+            param("teamcity.kubernetes.executor.pull.policy", "")
+        }
         update<PowerShellStep>(15) {
             clearConditions()
             scriptMode = script {
