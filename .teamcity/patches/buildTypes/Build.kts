@@ -1250,7 +1250,7 @@ changeBuildType(RelativeId("Build")) {
                     Write-Host "Attesting artifact: ${'$'}ArtifactPath"
                     
                     ${'$'}RepoUrl   = "https://github.com/GurdipS5/lead-ops-showcase-hub"
-                    ${'$'}CommitSha = "%build.vcs.number%"
+                    ${'$'}CommitSha = (git rev-parse HEAD).Trim()
                     ${'$'}CommitUrl = "${'$'}RepoUrl/commit/${'$'}CommitSha"
                     
                     
