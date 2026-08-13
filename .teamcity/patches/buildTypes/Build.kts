@@ -46,6 +46,8 @@ changeBuildType(RelativeId("Build")) {
 
         expectEntry(DslContext.settingsRoot.id!!)
         root(DslContext.settingsRoot.id!!, "+:.=>portfolio")
+        expectEntry(RelativeId("HttpsGithubComGurdipSCodeDevopsCiScriptsRefsHeadsMain"))
+        root(RelativeId("HttpsGithubComGurdipSCodeDevopsCiScriptsRefsHeadsMain"), "+:.=>ci-scripts")
     }
 
     expectSteps {
