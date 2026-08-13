@@ -1249,12 +1249,9 @@ changeBuildType(RelativeId("Build")) {
                     }
                     Write-Host "Attesting artifact: ${'$'}ArtifactPath"
                     
-                    ${'$'}RepoUrl = "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%"
-                    ${'$'}RepoUrl = ${'$'}RepoUrl -replace '\.git${'$'}', ''            # strip .git suffix
-                    ${'$'}RepoUrl = ${'$'}RepoUrl -replace '^git@([^:]+):', 'https://${'$'}1/'  # ssh -> https
-                    ${'$'}RepoUrl = ${'$'}RepoUrl.TrimEnd('/')
-                    
-                    ${'$'}CommitUrl = "${'$'}RepoUrl/commit/${'$'}TrailName"
+                    ${'$'}RepoUrl   = "https://github.com/GurdipS5/lead-ops-showcase-hub"
+                    ${'$'}CommitSha = "%build.vcs.number%"
+                    ${'$'}CommitUrl = "${'$'}RepoUrl/commit/${'$'}CommitSha"
                     
                     
                     # Attest the artifact to Kosli
