@@ -1165,6 +1165,14 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        insert(1) {
+            script {
+                name = "NPM Install"
+                id = "NPM_Build_1"
+                scriptContent = "npm i"
+            }
+        }
+        items.removeAt(3)
         update<PowerShellStep>(11) {
             clearConditions()
             scriptMode = script {
