@@ -43,6 +43,9 @@ changeBuildType(RelativeId("Build")) {
             "Unexpected option value: checkoutMode = $checkoutMode"
         }
         checkoutMode = CheckoutMode.ON_AGENT
+
+        expectEntry(DslContext.settingsRoot.id!!)
+        root(DslContext.settingsRoot.id!!, "+:.=>portfolio")
     }
 
     expectSteps {
