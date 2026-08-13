@@ -1249,6 +1249,14 @@ changeBuildType(RelativeId("Build")) {
                     }
                     Write-Host "Attesting artifact: ${'$'}ArtifactPath"
                     
+                    ${'$'}RepoUrl = "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%"
+                    ${'$'}RepoUrl = ${'$'}RepoUrl -replace '\.git${'$'}', ''            # strip .git suffix
+                    ${'$'}RepoUrl = ${'$'}RepoUrl -replace '^git@([^:]+):', 'https://${'$'}1/'  # ssh -> https
+                    ${'$'}RepoUrl = ${'$'}RepoUrl.TrimEnd('/')
+                    
+                    ${'$'}CommitUrl = "${'$'}RepoUrl/commit/${'$'}TrailName"
+                    
+                    
                     # Attest the artifact to Kosli
                     # Kosli will calculate the SHA256 fingerprint automatically based on --artifact-type
                     kosli attest artifact ${'$'}ArtifactPath `
@@ -1258,7 +1266,7 @@ changeBuildType(RelativeId("Build")) {
                       --trail ${'$'}TrailName `
                       --org ${'$'}KosliOrg `
                       --commit ${'$'}TrailName `
-                      --commit-url "%vcsroot.Portfolio_HttpsGithubComGurdipS5leadOpsShowcaseHubRefsHeadsMain.url%/commit/${'$'}TrailName" `
+                      --commit-url ${'$'}CommitUrl `
                       --build-url "%teamcity.serverUrl%/viewLog.html?buildId=%teamcity.build.id%" `
                       --api-token %KOSLI_KEY%
                     
