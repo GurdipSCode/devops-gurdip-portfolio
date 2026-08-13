@@ -1,14 +1,14 @@
 # CodeRabbit Configuration for JavaScript Portfolio
 
 # Language settings
-language: en-US
+language: en-UK
 
 # Review settings
 reviews:
   # Enable auto-review on pull requests
   auto_review:
     enabled: true
-    drafts: false
+    drafts: true
 
   # Request changes for critical issues
   request_changes_workflow: true

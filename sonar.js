@@ -3,6 +3,7 @@ import { scan } from 'sonarqube-scanner';
 import process from 'node:process';
 import console from 'node:console';
 
+//
 async function sonarScan() {
   try {
     await scan({
