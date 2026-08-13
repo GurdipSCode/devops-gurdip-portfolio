@@ -1233,7 +1233,7 @@ changeBuildType(RelativeId("Build")) {
                     .EXAMPLE
                         # TeamCity: key supplied by the Vault integration
                         ${'$'}env:COSIGN_KEY      = "%COSIGN_KEY%"
-                        ${'$'}env:COSIGN_PASSWORD = "%COSIGN_KEY_PASSWORD%"
+                        ${'$'}env:COSIGN_PASSWORD = "%COSIGN_PASSWORD%"
                         .\sign-artifact.ps1 -DeliverablePath "%teamcity.build.checkoutDir%\dist\portfolio.zip"
                     
                     .EXAMPLE
