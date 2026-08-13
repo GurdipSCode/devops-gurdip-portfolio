@@ -1165,6 +1165,457 @@ changeBuildType(RelativeId("Build")) {
         }
     }
     steps {
+        update<PowerShellStep>(11) {
+            clearConditions()
+            scriptMode = script {
+                content = """
+                    #Requires -Version 7.0
+                    <#
+                    .SYNOPSIS
+                        Signs any deliverable (nupkg, zip, exe, etc.) with Cosign and produces
+                        a SHA-256 checksum. Can be used standalone or called from publish-to-cloudsmith.ps1.
+                    
+                    .DESCRIPTION
+                        Accepts a path to any file, computes its SHA-256 checksum, signs both
+                        the artifact and the checksum with Cosign (key-based or keyless OIDC),
+                        and verifies the signature locally before exiting.
+                    
+                        The private key can come from three places, tried in this order:
+                          1. The COSIGN_KEY environment variable (populated from HashiCorp Vault
+                             via the TeamCity Vault integration). Accepts raw PEM or base64-encoded
+                             PEM. Materialised to a locked-down temp file and deleted on exit.
+                          2. -CosignPrivateKeyPath, for local/manual runs.
+                          3. Neither, when -KeylessSign is used.
+                    
+                        Outputs a hashtable of produced files so callers can consume them:
+                            ${'$'}result.Artifact       – original file (resolved absolute path)
+                            ${'$'}result.Checksum       – <artifact>.sha256
+                            ${'$'}result.Bundle         – <artifact>.bundle
+                            ${'$'}result.ChecksumBundle – <artifact>.sha256.bundle  (key-based only)
+                            ${'$'}result.PublicKey      – resolved path to cosign.pub (key-based only)
+                            ${'$'}result.KeySource      – "vault" | "file" | "n/a"
+                            ${'$'}result.Mode           – "key-based" | "keyless"
+                    
+                    .PARAMETER DeliverablePath
+                        Path to the file to sign. Accepts any file type: .nupkg, .zip, .exe, .msi, etc.
+                    
+                    .PARAMETER CosignKeyEnvVar
+                        Name of the environment variable holding the PEM private key.
+                        Defaults to COSIGN_KEY. Set this in your TeamCity build step from the
+                        Vault-backed parameter. Ignored when -KeylessSign is used.
+                    
+                    .PARAMETER CosignPrivateKeyPath
+                        Path to cosign.key. Defaults to ./cosign.key. Only used when the
+                        environment variable named by -CosignKeyEnvVar is empty.
+                        Ignored when -KeylessSign is used.
+                    
+                    .PARAMETER CosignPublicKeyPath
+                        Path to cosign.pub, used for local verification after signing.
+                        If the file does not exist it is derived from the private key.
+                        Ignored when -KeylessSign is used.
+                    
+                    .PARAMETER KeylessSign
+                        Use Cosign keyless signing via ambient OIDC token (GitHub Actions, GCP, Azure, etc.).
+                        No private key is needed. The Rekor transparency log entry is embedded in the bundle.
+                    
+                    .PARAMETER GenerateKeys
+                        Generate a new Cosign key pair and exit. Run once during initial setup.
+                        Reads passphrase from COSIGN_PASSWORD env var, or prompts interactively.
+                    
+                    .PARAMETER OutputDir
+                        Directory to write signing artefacts (.sha256, .bundle) into.
+                        Defaults to the same directory as the deliverable.
+                    
+                    .EXAMPLE
+                        # One-time: generate key pair, then store cosign.key in Vault
+                        .\sign-artifact.ps1 -GenerateKeys
+                    
+                    .EXAMPLE
+                        # TeamCity: key supplied by the Vault integration
+                        ${'$'}env:COSIGN_KEY      = "%COSIGN_KEY%"
+                        ${'$'}env:COSIGN_PASSWORD = "%COSIGN_KEY_PASSWORD%"
+                        .\sign-artifact.ps1 -DeliverablePath "%teamcity.build.checkoutDir%\dist\portfolio.zip"
+                    
+                    .EXAMPLE
+                        # Local run against a key file on disk
+                        ${'$'}env:COSIGN_PASSWORD = "..."
+                        .\sign-artifact.ps1 -DeliverablePath "./dist/MyPackage.1.2.3.nupkg"
+                    
+                    .EXAMPLE
+                        # Use from another script and capture output paths
+                        ${'$'}signed = .\sign-artifact.ps1 -DeliverablePath ${'$'}nupkgPath
+                        Write-Host "Bundle at: ${'$'}(${'$'}signed.Bundle)"
+                    #>
+                    
+                    [CmdletBinding(DefaultParameterSetName = "KeyBased")]
+                    param(
+                        [Parameter(Mandatory, ParameterSetName = "KeyBased", Position = 0)]
+                        [Parameter(Mandatory, ParameterSetName = "Keyless",  Position = 0)]
+                        [string] ${'$'}DeliverablePath,
+                    
+                        [Parameter(ParameterSetName = "KeyBased")]
+                        [string] ${'$'}CosignKeyEnvVar = "COSIGN_KEY",
+                    
+                        [Parameter(ParameterSetName = "KeyBased")]
+                        [string] ${'$'}CosignPrivateKeyPath = "./cosign.key",
+                    
+                        [string] ${'$'}CosignPublicKeyPath  = "./cosign.pub",
+                    
+                        [Parameter(Mandatory, ParameterSetName = "Keyless")]
+                        [switch] ${'$'}KeylessSign,
+                    
+                        [Parameter(Mandatory, ParameterSetName = "GenerateKeys")]
+                        [switch] ${'$'}GenerateKeys,
+                    
+                        [string] ${'$'}OutputDir = ""
+                    )
+                    
+                    Set-StrictMode -Version Latest
+                    ${'$'}ErrorActionPreference = "Stop"
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Helpers
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    function Write-Step([string]${'$'}msg) {
+                        Write-Host "`n▶  ${'$'}msg" -ForegroundColor Cyan
+                    }
+                    
+                    function Assert-Command([string]${'$'}name) {
+                        if (-not (Get-Command ${'$'}name -ErrorAction SilentlyContinue)) {
+                            throw "Required tool '${'$'}name' not found. Please install it and ensure it is on PATH."
+                        }
+                    }
+                    
+                    function Resolve-KeyMaterial([string]${'$'}raw) {
+                        <#
+                            Normalises whatever came out of Vault into a valid PEM string.
+                            Handles: raw PEM, base64-encoded PEM, CRLF line endings, and
+                            literal "\n" sequences that survived JSON/parameter transport.
+                        #>
+                        if ([string]::IsNullOrWhiteSpace(${'$'}raw)) {
+                            throw "Key material is empty."
+                        }
+                    
+                        ${'$'}text = ${'$'}raw.Trim()
+                    
+                        # Not PEM yet? Assume base64 and decode.
+                        if (${'$'}text -notmatch 'BEGIN [A-Z ]*PRIVATE KEY') {
+                            try {
+                                ${'$'}text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${'$'}text))
+                            } catch {
+                                throw "Key material is neither a PEM private key nor valid base64."
+                            }
+                        }
+                    
+                        # Literal backslash-n instead of real newlines
+                        if (${'$'}text -notmatch "`n") {
+                            ${'$'}text = ${'$'}text -replace '\\n', "`n"
+                        }
+                    
+                        ${'$'}text = ${'$'}text -replace "`r`n", "`n"
+                    
+                        if (${'$'}text -notmatch 'BEGIN [A-Z ]*PRIVATE KEY') {
+                            throw "Decoded material is not a PEM private key. Check the Vault path and field name."
+                        }
+                        if (-not ${'$'}text.EndsWith("`n")) {
+                            ${'$'}text += "`n"
+                        }
+                    
+                        return ${'$'}text
+                    }
+                    
+                    function New-TempKeyFile([string]${'$'}pem) {
+                        <#
+                            Writes the PEM to a temp file readable only by the current user,
+                            and returns the path. Caller is responsible for deleting it.
+                        #>
+                        ${'$'}path = Join-Path ([IO.Path]::GetTempPath()) ("cosign-{0}.key" -f [guid]::NewGuid())
+                    
+                        # No BOM — cosign will not parse a PEM that starts with one.
+                        [IO.File]::WriteAllText(${'$'}path, ${'$'}pem, [Text.UTF8Encoding]::new(${'$'}false))
+                    
+                        if (${'$'}IsWindows) {
+                            ${'$'}acl = Get-Acl -LiteralPath ${'$'}path
+                            ${'$'}acl.SetAccessRuleProtection(${'$'}true, ${'$'}false)   # break inheritance
+                            foreach (${'$'}rule in @(${'$'}acl.Access)) { ${'$'}acl.RemoveAccessRule(${'$'}rule) | Out-Null }
+                            ${'$'}me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+                            ${'$'}acl.AddAccessRule(
+                                [Security.AccessControl.FileSystemAccessRule]::new(
+                                    ${'$'}me, 'FullControl', 'None', 'None', 'Allow'))
+                            Set-Acl -LiteralPath ${'$'}path -AclObject ${'$'}acl
+                        } else {
+                            & chmod 600 ${'$'}path
+                        }
+                    
+                        return ${'$'}path
+                    }
+                    
+                    function Remove-TempKeyFile([string]${'$'}path) {
+                        if (${'$'}path -and (Test-Path -LiteralPath ${'$'}path)) {
+                            try {
+                                # Overwrite before unlinking so the key does not linger in free space.
+                                ${'$'}len = (Get-Item -LiteralPath ${'$'}path).Length
+                                [IO.File]::WriteAllBytes(${'$'}path, (New-Object byte[] ${'$'}len))
+                            } catch {
+                                Write-Verbose "Could not scrub temp key file: ${'$'}_"
+                            }
+                            Remove-Item -LiteralPath ${'$'}path -Force -ErrorAction SilentlyContinue
+                        }
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Dependency check
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Assert-Command "cosign"
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # MODE: Generate keys (one-time setup)
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    if (${'$'}GenerateKeys) {
+                        Write-Step "Generating Cosign key pair"
+                    
+                        ${'$'}privateKeyPath = Resolve-Path -LiteralPath (Split-Path ${'$'}CosignPrivateKeyPath -Parent) |
+                            ForEach-Object { Join-Path ${'$'}_.Path (Split-Path ${'$'}CosignPrivateKeyPath -Leaf) }
+                    
+                        if (Test-Path ${'$'}privateKeyPath) {
+                            Write-Warning "Key '${'$'}privateKeyPath' already exists. Remove it first to regenerate."
+                            exit 1
+                        }
+                    
+                        if (-not ${'$'}env:COSIGN_PASSWORD) {
+                            ${'$'}secPwd = Read-Host "Enter passphrase for cosign.key" -AsSecureString
+                            ${'$'}env:COSIGN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                                [Runtime.InteropServices.Marshal]::SecureStringToBSTR(${'$'}secPwd)
+                            )
+                        }
+                    
+                        ${'$'}prefix = [System.IO.Path]::GetFileNameWithoutExtension(${'$'}CosignPrivateKeyPath)
+                        cosign generate-key-pair --output-key-prefix ${'$'}prefix
+                    
+                        Write-Host ""
+                        Write-Host "✅  Key pair generated:" -ForegroundColor Green
+                        Write-Host "    Private : ${'$'}CosignPrivateKeyPath"
+                        Write-Host "              ^ Store in Vault, expose to CI as the COSIGN_KEY parameter." -ForegroundColor Yellow
+                        Write-Host "                Tip: base64 it first so it survives transport as one line:" -ForegroundColor Yellow
+                        Write-Host "                  [Convert]::ToBase64String([IO.File]::ReadAllBytes('${'$'}CosignPrivateKeyPath'))" -ForegroundColor Gray
+                        Write-Host "    Public  : ${'$'}CosignPublicKeyPath"
+                        Write-Host "              ^ Commit to your repo or publish to a trust store." -ForegroundColor Gray
+                        exit 0
+                    }
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Resolve paths
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    Write-Step "Pre-flight checks"
+                    
+                    if (-not (Test-Path ${'$'}DeliverablePath)) {
+                        throw "Deliverable not found: ${'$'}DeliverablePath"
+                    }
+                    
+                    ${'$'}resolvedDeliverable = (Resolve-Path ${'$'}DeliverablePath).Path
+                    ${'$'}deliverableName     = Split-Path ${'$'}resolvedDeliverable -Leaf
+                    ${'$'}deliverableDir      = Split-Path ${'$'}resolvedDeliverable -Parent
+                    
+                    # Where to write signing artefacts
+                    ${'$'}sigDir = if (${'$'}OutputDir) {
+                        if (-not (Test-Path ${'$'}OutputDir)) { New-Item -ItemType Directory -Path ${'$'}OutputDir | Out-Null }
+                        (Resolve-Path ${'$'}OutputDir).Path
+                    } else {
+                        ${'$'}deliverableDir
+                    }
+                    
+                    ${'$'}stem         = Join-Path ${'$'}sigDir ${'$'}deliverableName
+                    ${'$'}checksumFile = "${'$'}stem.sha256"
+                    ${'$'}bundleFile   = "${'$'}stem.bundle"
+                    
+                    # ─────────────────────────────────────────────────────────────
+                    # Resolve the signing key
+                    # ─────────────────────────────────────────────────────────────
+                    
+                    ${'$'}tempKeyFile    = ${'$'}null
+                    ${'$'}keySource      = "n/a"
+                    ${'$'}resolvedPubKey = ${'$'}null
+                    
+                    if (-not ${'$'}KeylessSign) {
+                    
+                        ${'$'}keyFromEnv = [Environment]::GetEnvironmentVariable(${'$'}CosignKeyEnvVar)
+                    
+                        if (-not [string]::IsNullOrWhiteSpace(${'$'}keyFromEnv)) {
+                            # Vault (via TeamCity) supplied the key
+                            ${'$'}tempKeyFile          = New-TempKeyFile (Resolve-KeyMaterial ${'$'}keyFromEnv)
+                            ${'$'}CosignPrivateKeyPath = ${'$'}tempKeyFile
+                            ${'$'}keySource            = "vault"
+                        }
+                        elseif (Test-Path ${'$'}CosignPrivateKeyPath) {
+                            ${'$'}CosignPrivateKeyPath = (Resolve-Path ${'$'}CosignPrivateKeyPath).Path
+                            ${'$'}keySource            = "file"
+                        }
+                        else {
+                            throw @"
+                    No signing key available.
+                      - Set the '${'$'}CosignKeyEnvVar' environment variable from your Vault-backed
+                        TeamCity parameter, e.g.  `${'$'}env:${'$'}CosignKeyEnvVar = "%${'$'}CosignKeyEnvVar%"
+                      - or place a key file at: ${'$'}CosignPrivateKeyPath  (see -GenerateKeys)
+                      - or pass -KeylessSign to use ambient OIDC.
+                    "@
+                        }
+                    
+                        if (-not ${'$'}env:COSIGN_PASSWORD) {
+                            throw "COSIGN_PASSWORD environment variable must be set for key-based signing. Set it to an empty-string equivalent only if the key genuinely has no passphrase."
+                        }
+                    }
+                    
+                    Write-Host "  Deliverable : ${'$'}resolvedDeliverable"
+                    Write-Host "  Output dir  : ${'$'}sigDir"
+                    Write-Host "  Sign mode   : ${'$'}(if (${'$'}KeylessSign) { 'keyless (OIDC / Sigstore)' } else { 'key-based' })"
+                    if (-not ${'$'}KeylessSign) {
+                        Write-Host "  Key source  : ${'$'}(if (${'$'}keySource -eq 'vault') { "`${'$'}env:${'$'}CosignKeyEnvVar (Vault)" } else { ${'$'}CosignPrivateKeyPath })"
+                    }
+                    
+                    try {
+                    
+                        # ─────────────────────────────────────────────────────────
+                        # Public key for local verification
+                        # ─────────────────────────────────────────────────────────
+                    
+                        if (-not ${'$'}KeylessSign) {
+                            if (Test-Path ${'$'}CosignPublicKeyPath) {
+                                ${'$'}resolvedPubKey = (Resolve-Path ${'$'}CosignPublicKeyPath).Path
+                            } else {
+                                # Derive it rather than requiring a second Vault secret.
+                                ${'$'}resolvedPubKey = Join-Path ${'$'}sigDir "cosign.pub"
+                                Write-Step "Deriving public key from private key"
+                                cosign public-key --key ${'$'}CosignPrivateKeyPath --outfile ${'$'}resolvedPubKey
+                                if (${'$'}LASTEXITCODE -ne 0) { throw "cosign public-key failed (exit ${'$'}LASTEXITCODE). Wrong passphrase, or malformed key material." }
+                                Write-Host "  ${'$'}resolvedPubKey"
+                            }
+                        }
+                    
+                        # ─────────────────────────────────────────────────────────
+                        # Step 1 – SHA-256 checksum
+                        # ─────────────────────────────────────────────────────────
+                    
+                        Write-Step "Computing SHA-256 checksum"
+                    
+                        ${'$'}hash = (Get-FileHash -Algorithm SHA256 ${'$'}resolvedDeliverable).Hash.ToLower()
+                        "${'$'}hash  ${'$'}deliverableName" | Set-Content ${'$'}checksumFile -Encoding ascii
+                    
+                        Write-Host "  ${'$'}hash"
+                        Write-Host "  Written to: ${'$'}checksumFile"
+                    
+                        # ─────────────────────────────────────────────────────────
+                        # Step 2 – Sign
+                        # ─────────────────────────────────────────────────────────
+                    
+                        Write-Step "Signing with Cosign"
+                    
+                        if (${'$'}KeylessSign) {
+                            # Keyless: ambient OIDC token (GitHub Actions / GCP / Azure) → Rekor log
+                            cosign sign-blob `
+                                --yes `
+                                --bundle ${'$'}bundleFile `
+                                ${'$'}resolvedDeliverable
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "cosign sign-blob failed (exit ${'$'}LASTEXITCODE)." }
+                    
+                            Write-Host "  Bundle (sig + Rekor entry): ${'$'}bundleFile"
+                        } else {
+                            # Key-based: --bundle output (cosign v2 modern path — no legacy warning).
+                            # The bundle embeds the signature so consumers only need cosign.pub to verify.
+                            cosign sign-blob `
+                                --key                ${'$'}CosignPrivateKeyPath `
+                                --bundle             ${'$'}bundleFile `
+                                --tlog-upload=false `
+                                ${'$'}resolvedDeliverable
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "cosign sign-blob failed on the artifact (exit ${'$'}LASTEXITCODE)." }
+                    
+                            Write-Host "  Bundle : ${'$'}bundleFile"
+                    
+                            # Sign the checksum with the same approach
+                            cosign sign-blob `
+                                --key                ${'$'}CosignPrivateKeyPath `
+                                --bundle             "${'$'}checksumFile.bundle" `
+                                --tlog-upload=false `
+                                ${'$'}checksumFile
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "cosign sign-blob failed on the checksum (exit ${'$'}LASTEXITCODE)." }
+                    
+                            Write-Host "  Checksum bundle: ${'$'}checksumFile.bundle"
+                        }
+                    
+                        # ─────────────────────────────────────────────────────────
+                        # Step 3 – Local verification (catch key/config mistakes early)
+                        # ─────────────────────────────────────────────────────────
+                    
+                        Write-Step "Verifying signature (local sanity check)"
+                    
+                        if (${'$'}KeylessSign) {
+                            cosign verify-blob `
+                                --bundle ${'$'}bundleFile `
+                                ${'$'}resolvedDeliverable
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "cosign verify-blob failed (exit ${'$'}LASTEXITCODE)." }
+                        } else {
+                            # --insecure-ignore-tlog because we deliberately skipped the transparency log
+                            # (--tlog-upload=false above). This is correct for air-gapped / private CI.
+                            cosign verify-blob `
+                                --key                 ${'$'}resolvedPubKey `
+                                --bundle              ${'$'}bundleFile `
+                                --insecure-ignore-tlog `
+                                ${'$'}resolvedDeliverable
+                            if (${'$'}LASTEXITCODE -ne 0) { throw "cosign verify-blob failed (exit ${'$'}LASTEXITCODE). Signature does not match ${'$'}resolvedPubKey." }
+                    
+                            Write-Host "  ✅ Signature verified against ${'$'}resolvedPubKey"
+                        }
+                    
+                        # ─────────────────────────────────────────────────────────
+                        # Return result hashtable
+                        # ─────────────────────────────────────────────────────────
+                    
+                        Write-Host ""
+                        Write-Host "✅  Signing complete." -ForegroundColor Green
+                    
+                        ${'$'}result = [ordered]@{
+                            Artifact  = ${'$'}resolvedDeliverable
+                            Checksum  = ${'$'}checksumFile
+                            Bundle    = ${'$'}bundleFile
+                            Mode      = if (${'$'}KeylessSign) { "keyless" } else { "key-based" }
+                            KeySource = ${'$'}keySource
+                        }
+                    
+                        if (-not ${'$'}KeylessSign) {
+                            ${'$'}result.ChecksumBundle = "${'$'}checksumFile.bundle"
+                            ${'$'}result.PublicKey      = ${'$'}resolvedPubKey
+                        }
+                    
+                        Write-Host ""
+                        Write-Host "Files produced:"
+                        foreach (${'$'}k in ${'$'}result.Keys) {
+                            Write-Host ("  {0,-16} {1}" -f "${'$'}{k}:", ${'$'}result[${'$'}k]) -ForegroundColor Gray
+                        }
+                    
+                        Write-Host ""
+                        Write-Host "Verify on another machine with:"
+                        if (${'$'}KeylessSign) {
+                            Write-Host "  cosign verify-blob --bundle ${'$'}bundleFile ${'$'}resolvedDeliverable"
+                        } else {
+                            Write-Host "  cosign verify-blob --key cosign.pub --bundle ${'$'}bundleFile --insecure-ignore-tlog ${'$'}resolvedDeliverable"
+                        }
+                    
+                        return ${'$'}result
+                    }
+                    finally {
+                        # Runs on success, on throw, and on `return` above.
+                        if (${'$'}tempKeyFile) {
+                            Remove-TempKeyFile ${'$'}tempKeyFile
+                            Write-Verbose "Temp key file removed."
+                        }
+                    }
+                """.trimIndent()
+            }
+            param("teamcity.kubernetes.executor.pull.policy", "")
+        }
         update<PowerShellStep>(12) {
             clearConditions()
             scriptMode = script {
