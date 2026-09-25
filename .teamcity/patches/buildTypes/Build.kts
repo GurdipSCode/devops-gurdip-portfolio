@@ -1182,6 +1182,7 @@ changeBuildType(RelativeId("Build")) {
             script {
                 name = "NPM Install"
                 id = "NPM_Build_1"
+                workingDir = "portfolio"
                 scriptContent = "npm i"
             }
         }
