@@ -1,11 +1,17 @@
 # Dependencies
 node_modules
 
+cosign.key
+*.key
+!cosign.pub
+
+
 # OS
 .DS_Store
 
-# Build output
-dist
+# But keep the folder itself
+!dist/.gitkeep
+
 stats.html
 
 # Favicon generation

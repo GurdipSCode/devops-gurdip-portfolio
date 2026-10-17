@@ -15,7 +15,7 @@ interface Repository {
 }
 
 const GitHubWidget = () => {
-  const username = "gurdips5";
+  const username = "gurdipscode";
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
